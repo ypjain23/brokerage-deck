@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Native AI Brokerage — Venture Deck</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --navy: #0d1117;
+  --navy2: #161b22;
+  --blue: #2462F5;
+  --blue-lt: #e8effe;
+  --blue-mid: #94b4fb;
+  --green: #1d9e75;
+  --green-lt: #e1f5ee;
+  --red: #e24b4a;
+  --red-lt: #fcebeb;
+  --amber: #d97706;
+  --amber-lt: #fef3c7;
+  --white: #ffffff;
+  --off: #f8f7f4;
+  --muted: #6b7280;
+  --border: rgba(0,0,0,0.08);
+  --slide-w: 900px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: #f0ede8;
+  color: var(--navy);
+  min-height: 100vh;
+}
+.deck {
+  max-width: var(--slide-w);
+  margin: 0 auto;
+  padding: 40px 20px 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.slide {
+  background: var(--white);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 8px 32px rgba(0,0,0,0.06);
+  position: relative;
+}
+.slide-inner { padding: 56px 64px; }
+.slide-num {
+  position: absolute;
+  top: 20px; right: 24px;
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(0,0,0,0.2);
+  letter-spacing: 0.08em;
+}
+.eyebrow {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--blue);
+  margin-bottom: 10px;
+}
+.display {
+  font-family: 'DM Serif Display', serif;
+  font-size: 48px;
+  line-height: 1.1;
+  color: var(--navy);
+  margin-bottom: 16px;
+}
+.display em { font-style: italic; color: var(--blue); }
+.display.lg { font-size: 52px; }
+.display.sm { font-size: 36px; }
+.body { font-size: 15px; line-height: 1.7; color: #444; max-width: 600px; }
+.body.wide { max-width: 100%; }
+.section-label {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 16px;
+}
+.rule { height: 0.5px; background: var(--border); margin: 32px 0; }
+.cover { background: var(--navy); }
+.cover .slide-inner { padding: 72px 64px 64px; }
+.cover .eyebrow { color: var(--blue-mid); }
+.cover .display { color: var(--white); font-size: 56px; }
+.cover .display em { color: var(--blue-mid); }
+.cover .body { color: rgba(255,255,255,0.6); }
+.cover .slide-num { color: rgba(255,255,255,0.2); }
+.cover-meta {
+  display: flex;
+  gap: 32px;
+  margin-top: 48px;
+  padding-top: 32px;
+  border-top: 0.5px solid rgba(255,255,255,0.1);
+}
+.cover-meta-item .label { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.35); margin-bottom: 4px; }
+.cover-meta-item .val { font-size: 14px; font-weight: 500; color: rgba(255,255,255,0.85); }
+.cover-accent {
+  position: absolute;
+  top: 0; right: 0;
+  width: 320px; height: 320px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(36,98,245,0.15) 0%, transparent 70%);
+  pointer-events: none;
+}
+.stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 32px; }
+.stat-card { background: var(--off); border-radius: 12px; padding: 20px 24px; }
+.stat-card .num { font-family: 'DM Serif Display', serif; font-size: 36px; color: var(--navy); line-height: 1; margin-bottom: 6px; }
+.stat-card .num.blue { color: var(--blue); }
+.stat-card .stat-label { font-size: 12px; color: var(--muted); line-height: 1.5; }
+.ps-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 28px; }
+.ps-card { border-radius: 12px; padding: 20px 24px; }
+.ps-card.prob { background: var(--red-lt); }
+.ps-card.sol { background: var(--green-lt); }
+.ps-card h3 { font-size: 11px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 14px; }
+.ps-card.prob h3 { color: var(--red); }
+.ps-card.sol h3 { color: var(--green); }
+.ps-item { font-size: 13px; color: #444; padding: 6px 0; border-bottom: 0.5px solid rgba(0,0,0,0.06); line-height: 1.5; display: flex; gap: 8px; }
+.ps-item:last-child { border-bottom: none; }
+.ps-icon { flex-shrink: 0; }
+.feat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 28px; }
+.feat-card { background: var(--off); border-radius: 10px; padding: 18px 20px; }
+.feat-card .feat-title { font-size: 13px; font-weight: 500; color: var(--navy); margin-bottom: 5px; }
+.feat-card .feat-body { font-size: 12px; color: var(--muted); line-height: 1.6; }
+.feat-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--blue); display: inline-block; margin-right: 8px; flex-shrink: 0; margin-top: 5px; }
+.tier-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 28px; }
+.tier-card { border-radius: 12px; padding: 20px; border: 0.5px solid var(--border); position: relative; }
+.tier-card.featured { border: 2px solid var(--blue); }
+.tier-top-badge { position: absolute; top: -11px; left: 50%; transform: translateX(-50%); background: var(--blue); color: white; font-size: 10px; font-weight: 500; padding: 3px 10px; border-radius: 20px; white-space: nowrap; }
+.tier-card .tier-name { font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+.tier-card .tier-price { font-size: 24px; font-weight: 500; color: var(--blue); }
+.tier-card .tier-split { font-size: 11px; color: var(--green); font-weight: 500; margin-bottom: 12px; }
+.tier-row { font-size: 12px; color: #555; padding: 4px 0; border-bottom: 0.5px solid var(--border); display: flex; justify-content: space-between; }
+.tier-row:last-child { border-bottom: none; }
+.tier-row .pos { color: var(--green); font-weight: 500; }
+.flywheel { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-top: 28px; align-items: start; }
+.fw-side h3 { font-size: 13px; font-weight: 500; margin-bottom: 12px; color: var(--navy); }
+.fw-item { display: flex; gap: 12px; margin-bottom: 12px; align-items: flex-start; }
+.fw-num { width: 24px; height: 24px; border-radius: 50%; background: var(--blue-lt); color: var(--blue); font-size: 11px; font-weight: 500; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.fw-text { font-size: 13px; color: #555; line-height: 1.55; }
+.comp-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 24px; }
+.comp-table th { text-align: left; font-size: 10px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); padding: 8px 12px; border-bottom: 0.5px solid var(--border); }
+.comp-table td { padding: 10px 12px; border-bottom: 0.5px solid var(--border); color: #555; }
+.comp-table tr:last-child td { border-bottom: none; }
+.comp-table tr.you td { font-weight: 500; color: var(--navy); background: var(--blue-lt); }
+.comp-table tr.you td:first-child { border-radius: 6px 0 0 6px; }
+.comp-table tr.you td:last-child { border-radius: 0 6px 6px 0; }
+.yes { color: var(--green); font-weight: 500; }
+.no { color: var(--red); }
+.part { color: var(--amber); }
+.tam-section { margin-top: 28px; }
+.tam-row { display: flex; align-items: center; gap: 14px; margin-bottom: 10px; }
+.tam-tag { font-size: 11px; font-weight: 500; color: var(--muted); width: 36px; flex-shrink: 0; }
+.tam-track { flex: 1; height: 22px; background: var(--off); border-radius: 4px; overflow: hidden; }
+.tam-fill { height: 100%; border-radius: 4px; display: flex; align-items: center; padding-left: 10px; }
+.tam-fill span { font-size: 11px; font-weight: 500; color: white; white-space: nowrap; }
+.tam-note { font-size: 11px; color: var(--muted); margin-top: 8px; }
+.phase-list { margin-top: 24px; }
+.phase-item { display: flex; gap: 16px; padding: 14px 0; border-bottom: 0.5px solid var(--border); }
+.phase-item:last-child { border-bottom: none; }
+.phase-num { width: 28px; height: 28px; border-radius: 50%; background: var(--blue-lt); color: var(--blue); font-size: 13px; font-weight: 500; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.phase-content .phase-title { font-size: 13px; font-weight: 500; margin-bottom: 3px; }
+.phase-content .phase-desc { font-size: 12px; color: var(--muted); line-height: 1.6; }
+.risk-list { display: flex; flex-direction: column; gap: 10px; margin-top: 24px; }
+.risk-item { background: var(--amber-lt); border-radius: 10px; padding: 14px 16px; display: flex; gap: 12px; }
+.risk-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); flex-shrink: 0; margin-top: 5px; }
+.risk-title { font-size: 13px; font-weight: 500; margin-bottom: 3px; }
+.risk-desc { font-size: 12px; color: var(--muted); line-height: 1.55; }
+.verdict { background: var(--navy); color: white; }
+.verdict .slide-inner { padding: 56px 64px; }
+.verdict .display { color: white; }
+.verdict .display em { color: var(--blue-mid); }
+.verdict .body { color: rgba(255,255,255,0.65); max-width: 640px; }
+.verdict-points { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 36px; }
+.verdict-point { border: 0.5px solid rgba(255,255,255,0.12); border-radius: 10px; padding: 16px 20px; }
+.verdict-point .vp-label { font-size: 10px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--blue-mid); margin-bottom: 6px; }
+.verdict-point .vp-body { font-size: 13px; color: rgba(255,255,255,0.65); line-height: 1.6; }
+.calc-slide { background: var(--off); }
+.calc-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 24px 0 20px; }
+.calc-ctrl { background: white; border-radius: 10px; padding: 16px 18px; border: 0.5px solid var(--border); }
+.calc-ctrl label { font-size: 10px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); display: block; margin-bottom: 8px; }
+.calc-ctrl .cval { font-size: 22px; font-weight: 500; color: var(--navy); margin-bottom: 8px; }
+.calc-tiers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
+.calc-tier { background: white; border: 0.5px solid var(--border); border-radius: 12px; padding: 16px; }
+.calc-tier.feat { border: 2px solid var(--blue); }
+.calc-tier .ct-name { font-size: 13px; font-weight: 500; margin-bottom: 2px; }
+.calc-tier .ct-price { font-size: 20px; font-weight: 500; color: var(--blue); }
+.calc-tier .ct-split { font-size: 11px; color: var(--green); font-weight: 500; margin-bottom: 10px; }
+.calc-tier .ct-row { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; border-bottom: 0.5px solid var(--border); }
+.calc-tier .ct-row:last-child { border-bottom: none; }
+.ct-pos { color: var(--green); font-weight: 500; }
+.ct-neg { color: var(--red); font-weight: 500; }
+.ct-neu { font-weight: 500; }
+.calc-bars { background: white; border-radius: 10px; padding: 16px 18px; border: 0.5px solid var(--border); margin-bottom: 12px; }
+.calc-bars .bars-title { font-size: 10px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 14px; }
+.bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 12px; }
+.bar-label { width: 100px; flex-shrink: 0; color: var(--muted); }
+.bar-track { flex: 1; height: 18px; background: var(--off); border-radius: 4px; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 4px; display: flex; align-items: center; padding-left: 8px; transition: width 0.3s; }
+.bar-fill span { font-size: 11px; font-weight: 500; color: white; white-space: nowrap; }
+.calc-note { font-size: 12px; color: var(--muted); line-height: 1.65; padding: 12px 16px; background: white; border-radius: 8px; border-left: 3px solid var(--blue); }
+.arr-calc { background: var(--off); border-radius: 12px; padding: 24px; margin-top: 24px; }
+.arr-inputs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+.arr-input-card { background: white; border-radius: 10px; padding: 14px 16px; border: 0.5px solid var(--border); }
+.arr-input-card label { font-size: 10px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); display: block; margin-bottom: 8px; }
+.arr-input-card .aval { font-size: 20px; font-weight: 500; color: var(--navy); margin-bottom: 8px; }
+.arr-results { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.arr-result { background: white; border-radius: 10px; padding: 14px 16px; border: 0.5px solid var(--border); text-align: center; }
+.arr-result .ar-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+.arr-result .ar-val { font-size: 22px; font-weight: 500; color: var(--navy); }
+.arr-result .ar-val.blue { color: var(--blue); }
+.arr-result .ar-val.green { color: var(--green); }
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.slide { animation: fadeUp 0.4s ease both; }
+.slide:nth-child(1)  { animation-delay: 0.05s; }
+.slide:nth-child(2)  { animation-delay: 0.1s; }
+.slide:nth-child(3)  { animation-delay: 0.15s; }
+.slide:nth-child(4)  { animation-delay: 0.2s; }
+.slide:nth-child(5)  { animation-delay: 0.22s; }
+.slide:nth-child(6)  { animation-delay: 0.24s; }
+.slide:nth-child(7)  { animation-delay: 0.26s; }
+.slide:nth-child(8)  { animation-delay: 0.28s; }
+.slide:nth-child(9)  { animation-delay: 0.30s; }
+.slide:nth-child(10) { animation-delay: 0.32s; }
+.slide:nth-child(11) { animation-delay: 0.34s; }
+.slide:nth-child(12) { animation-delay: 0.36s; }
+</style>
+</head>
+<body>
+<div class="deck">
+<div class="slide cover">
+  <div class="cover-accent"></div>
+  <div class="slide-num">01 / 12</div>
+  <div class="slide-inner">
+    <div class="eyebrow">Venture Thesis — Confidential · March 2026</div>
+    <div class="display lg">The <em>Native AI</em><br>Commercial Brokerage</div>
+    <div class="body">Poach the best brokers from legacy shops. Give them better tech, better splits, and a brand built for the AI era. Keep everything a traditional brokerage offers — except the parts that were only ever rent-seeking.</div>
+    <div class="cover-meta">
+      <div class="cover-meta-item"><div class="label">Market</div><div class="val">US CRE Brokerage</div></div>
+      <div class="cover-meta-item"><div class="label">TAM</div><div class="val">$25B+</div></div>
+      <div class="cover-meta-item"><div class="label">Model</div><div class="val">SaaS + Commission</div></div>
+      <div class="cover-meta-item"><div class="label">Stage</div><div class="val">Pre-Seed / Concept</div></div>
+    </div>
+  </div>
+</div>
+<div class="slide">
+  <div class="slide-num">02 / 12</div>
+  <div class="slide-inner">
+    <div class="eyebrow">The Problem</div>
+    <div class="display sm">The brokerage model is<br><em>structurally broken</em></div>
+    <div class="body">Legacy brokerage shops extract maximum value from their brokers while providing minimal infrastructure in return. The top producers — who bring all the relationships and deal flow — are the ones being squeezed hardest.</div>
+    <div class="ps-grid">
+      <div class="ps-card prob">
+        <h3>Legacy Brokerage Today</h3>
+        <div class="ps-item"><span class="ps-icon">✗</span><span>40–50% commission split to the house for a desk and an email address</span></div>
+        <div class="ps-item"><span class="ps-icon">✗</span><span>Brokers pay $25–30K/year out of pocket for their own tech stack</span></div>
+        <div class="ps-item"><span class="ps-icon">✗</span><span>OMs and BOVs take 8–10 hours to build manually</span></div>
+        <div class="ps-item"><span class="ps-icon">✗</span><span>No proprietary lead gen — brokers cold call on their own time</span></div>
+        <div class="ps-item"><span class="ps-icon">✗</span><span>No real-time principal-to-broker discovery network</span></div>
+      </div>
+      <div class="ps-card sol">
+        <h3>Native AI Brokerage</h3>
+        <div class="ps-item"><span class="ps-icon">✓</span><span>80–90% commission split — brokers keep what they earn</span></div>
+        <div class="ps-item"><span class="ps-icon">✓</span><span>Full AI stack included in monthly subscription — replaces all their tools</span></div>
+        <div class="ps-item"><span class="ps-icon">✓</span><span>OMs, BOVs, and pitch decks generated in under 60 seconds</span></div>
+        <div class="ps-item"><span class="ps-icon">✓</span><span>AI-powered lead gen, off-market sourcing, and owner outreach</span></div>
+        <div class="ps-item"><span class="ps-icon">✓</span><span>Live principal-broker marketplace — deals find the broker</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="slide">
+  <div class="slide-num">03 / 12</div>
+  <div class="slide-inner">
+    <div class="eyebrow">The Key Insight</div>
+    <div class="display sm">Brokers already pay<br><em>$2,500/month</em> — for worse tools</div>
+    <div class="body" style="margin-bottom:28px">A top commercial broker at Marcus &amp; Millichap pays ~$30,000/year out of pocket for a fragmented stack: CoStar, Crexi, a CRM, marketing tools. The house contributes nothing. This is the pricing anchor — not some arbitrary SaaS benchmark.</div>
+    <div class="stat-grid">
+      <div class="stat-card"><div class="num blue">$30K</div><div class="stat-label">Annual out-of-pocket software spend for a top M&amp;M broker today. The house pays nothing.</div></div>
+      <div class="stat-card"><div class="num blue">45%</div><div class="stat-label">Typical commission cut taken by the house at legacy brokerage firms. In exchange for a desk.</div></div>
+      <div class="stat-card"><div class="num blue">8–10 hrs</div><div class="stat-label">Time a broker currently spends manually building a single OM or BOV. Our platform: 60 seconds.</div></div>
+    </div>
+    <div style="margin-top:20px;padding:16px 20px;background:#e8effe;border-radius:10px;font-size:13px;color:#0C447C;line-height:1.6">
+      <strong>The pitch writes itself:</strong> "Switch to us. Your software costs drop by $6–18K/year, your split improves by 30–35 points, and your OM is ready before you finish your morning coffee."
+    </div>
+  </div>
+</div>
+<div class="slide">
+  <div class="slide-num">04 / 12</div>
+  <div class="slide-inner">
+    <div class="eyebrow">The Product</div>
+    <div class="display sm">An <em>AI-native</em> operating system<br>for the commercial broker</div>
+    <div class="body" style="margin-bottom:4px">Six integrated modules that replace every fragmented tool a broker currently pays for separately.</div>
+    <div class="feat-grid">
+      <div class="feat-card"><div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:6px"><div class="feat-dot" style="margin-top:4px"></div><div class="feat-title">OM Generator</div></div><div class="feat-body">Input address + deal type. AI pulls comps, demographics, and property data to produce a branded PDF offering memorandum in under 60 seconds. Replaces 8–10 hours of manual work per deal.</div></div>
+      <div class="feat-card"><div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:6px"><div class="feat-dot" style="margin-top:4px"></div><div class="feat-title">BOV Tool</div></div><div class="feat-body">Three-approach broker opinion of value (income, sales comparison, cost) with weighted reconciliation and a branded 2-page PDF output. Replaces CoStar comp research + manual spreadsheet work.</div></div>
+      <div class="feat-card"><div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:6px"><div class="feat-dot" style="margin-top:4px"></div><div class="feat-title">AI Lead Gen Engine</div></div><div class="feat-body">AI identifies off-market prospects via ownership records, debt maturities, permit data, and entity lookups. Auto-drafts personalized outreach for each lead. Replaces hours of cold research.</div></div>
+      <div class="feat-card"><div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:6px"><div class="feat-dot" style="margin-top:4px"></div><div class="feat-title">Broker Network Marketplace</div></div><div class="feat-body">Principals (investors, operators) search for brokers by market and asset type. Brokers get qualified inbound deal flow. A real-time social layer that CRE has never had.</div></div>
+      <div class="feat-card"><div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:6px"><div class="feat-dot" style="margin-top:4px"></div><div class="feat-title">CRM + Deal Room</div></div><div class="feat-body">AI-enriched contact database with deal history, relationship scoring, and automated follow-up sequences. All documents for a listing live in one deal room — OMs, BOVs, executed LOIs, due diligence.</div></div>
+      <div class="feat-card"><div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:6px"><div class="feat-dot" style="margin-top:4px"></div><div class="feat-title">Underwriting Suite</div></div><div class="feat-body">One-click pro forma with market rent, cap rate, and IRR sensitivity. Asset-class aware (NNN industrial, flex, retail). Exports buyer-ready Excel with full audit trail.</div></div>
+    </div>
+  </div>
+</div>
+<div class="slide calc-slide">
+  <div class="slide-num">05 / 12</div>
+  <div class="slide-inner">
+    <div class="eyebrow">Pricing Model — Interactive</div>
+    <div class="display sm">Brokers pay more,<br>and <em>still come out ahead</em></div>
+    <div class="body" style="margin-bottom:0">Adjust GCI and legacy split to see the economics for any broker profile.</div>
+    <div class="calc-controls">
+      <div class="calc-ctrl"><label>Annual GCI</label><div class="cval" id="gci-disp">$500,000</div><input type="range" id="gci-sl" min="100000" max="2000000" step="25000" value="500000" style="width:100%"></div>
+      <div class="calc-ctrl"><label>Legacy split (broker keeps)</label><div class="cval" id="leg-disp">55%</div><input type="range" id="leg-sl" min="45" max="70" step="5" value="55" style="width:100%"></div>
+    </div>
+    <div class="calc-tiers" id="calc-tiers"></div>
+    <div class="calc-bars"><div class="bars-title">Annual net take-home after platform cost</div><div id="calc-bars-inner"></div></div>
+    <div class="calc-note" id="calc-note"></div>
+  </div>
+</div>
+<div class="slide">
+  <div class="slide-num">06 / 12</div>
+  <div class="slide-inner">
+    <div class="eyebrow">Business Model</div>
+    <div class="display sm">Three revenue streams,<br><em>two are recurring</em></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:28px">
+      <div style="padding:24px;background:var(--blue-lt);border-radius:12px"><div style="font-size:10px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:#185FA5;margin-bottom:8px">Stream 1 · Recurring</div><div style="font-family:'DM Serif Display',serif;font-size:22px;color:var(--navy);margin-bottom:8px">SaaS Subscription</div><div style="font-size:12px;color:#444;line-height:1.6">$1,500–$3,500/month per broker seat. Predictable MRR that funds platform costs regardless of deal volume. Replaces the $2,500/mo brokers already spend on fragmented tools.</div></div>
+      <div style="padding:24px;background:var(--green-lt);border-radius:12px"><div style="font-size:10px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:#0F6E56;margin-bottom:8px">Stream 2 · Recurring</div><div style="font-family:'DM Serif Display',serif;font-size:22px;color:var(--navy);margin-bottom:8px">House Commission</div><div style="font-size:12px;color:#444;line-height:1.6">10–20% of GCI on every deal closed under the brand. You take less than legacy incumbents (40–50%) but still participate directly in broker production upside.</div></div>
+      <div style="padding:24px;background:var(--off);border-radius:12px;border:0.5px solid var(--border)"><div style="font-size:10px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Stream 3 · Long-term</div><div style="font-family:'DM Serif Display',serif;font-size:22px;color:var(--navy);margin-bottom:8px">Data &amp; API Licensing</div><div style="font-size:12px;color:#444;line-height:1.6">Proprietary transaction data, broker performance metrics, and AI outputs licensed to lenders, investors, and data aggregators. The flywheel builds a defensible data asset over time.</div></div>
+    </div>
+    <div style="margin-top:20px;padding:14px 20px;background:var(--off);border-radius:10px;font-size:12px;color:var(--muted);line-height:1.65"><strong style="color:var(--navy)">Unit economics:</strong> At $2,500/mo average (Pro), 100 brokers = $3M ARR before any commission take. At $500K average GCI per broker with 15% house take, 100 brokers adds another $7.5M in commission revenue. 100 active brokers is a rounding error in the 100,000-person US CRE broker market.</div>
+  </div>
+</div>
+<div class="slide calc-slide">
+  <div class="slide-num">07 / 12</div>
+  <div class="slide-inner">
+    <div class="eyebrow">Revenue Model — Interactive</div>
+    <div class="display sm">The SaaS math at<br><em>any scale</em></div>
+    <div class="body" style="margin-bottom:0">Adjust broker count, average subscription, and average GCI to model platform revenue.</div>
+    <div class="arr-calc">
+      <div class="arr-inputs">
+        <div class="arr-input-card"><label>Active Brokers</label><div class="aval" id="arr-brokers-disp">100</div><input type="range" id="arr-brokers" min="10" max="1000" step="10" value="100" style="width:100%"></div>
+        <div class="arr-input-card"><label>Avg Subscription / mo</label><div class="aval" id="arr-sub-disp">$2,500</div><input type="range" id="arr-sub" min="1500" max="3500" step="100" value="2500" style="width:100%"></div>
+        <div class="arr-input-card"><label>Avg Annual GCI / broker</label><div class="aval" id="arr-gci-disp">$500K</div><input type="range" id="arr-gci" min="200000" max="2000000" step="50000" value="500000" style="width:100%"></div>
+      </div>
+      <div class="arr-results" id="arr-results"></div>
+    </div>
+  </div>
+</div>
+<div class="slide">
+  <div class="slide-num">08 / 12</div>
+  <div class="slide-inner">
+    <div class="eyebrow">The Network Effect</div>
+    <div class="display sm">A two-sided marketplace<br>with a <em>data flywheel</em></div>
+    <div class="body" style="margin-bottom:4px">The broker platform and the principal network reinforce each other. This is what makes it defensible — not features.</div>
+    <div class="flywheel">
+      <div class="fw-side">
+        <h3>Principal side (Hempstead Labs clients)</h3>
+        <div class="fw-item"><div class="fw-num">1</div><div class="fw-text">Investor needs a broker in Pleasanton, CA. Today: Google + cold call + 2-day wait. On platform: search by market, see ranked profiles, deal history, and response rate. One-click intro.</div></div>
+        <div class="fw-item"><div class="fw-num">2</div><div class="fw-text">More principals using the platform → more broker search queries → brokers see tangible deal flow from being listed.</div></div>
+        <div class="fw-item"><div class="fw-num">3</div><div class="fw-text">Every principal-broker match adds a data point: who transacts where, what assets, at what pricing. The dataset compounds.</div></div>
+      </div>
+      <div class="fw-side">
+        <h3>Broker side (Native AI Brokerage members)</h3>
+        <div class="fw-item"><div class="fw-num">4</div><div class="fw-text">Brokers join for the economics (better split + lower software cost). They stay for the inbound deal flow the marketplace generates.</div></div>
+        <div class="fw-item"><div class="fw-num">5</div><div class="fw-text">More brokers → better market coverage → more value to principals → more Labs signups → more search queries → loop tightens.</div></div>
+        <div class="fw-item"><div class="fw-num">6</div><div class="fw-text">Proprietary transaction data becomes a moat: the platform knows more about who transacts what, where, and at what economics than any broker database that exists today.</div></div>
+      </div>
+    </div>
+    <div style="margin-top:20px;padding:14px 20px;background:var(--blue-lt);border-radius:10px;font-size:12px;color:#185FA5;line-height:1.6"><strong>Nobody has built this layer.</strong> Buildout stayed B2B-to-brokers only. CompStak built the data layer but not the marketplace. CoStar has the data but not the brokerage. This is the gap.</div>
+  </div>
+</div>
+<div class="slide">
+  <div class="slide-num">09 / 12</div>
+  <div class="slide-inner">
+    <div class="eyebrow">Market Opportunity</div>
+    <div class="display sm">A $25B market with<br><em>no AI-native player</em></div>
+    <div class="body">The US CRE brokerage market is large, fragmented, and structurally resistant to change — which means the disruption window for a well-capitalized, technology-first entrant is wide open right now.</div>
+    <div class="tam-section">
+      <div class="tam-row"><div class="tam-tag">TAM</div><div class="tam-track"><div class="tam-fill" style="width:100%;background:#2462F5"><span>$25B+ total US CRE brokerage revenue</span></div></div></div>
+      <div class="tam-row"><div class="tam-tag">SAM</div><div class="tam-track"><div class="tam-fill" style="width:58%;background:#378ADD"><span>~$8B independent + mid-market broker segment</span></div></div></div>
+      <div class="tam-row"><div class="tam-tag">SOM</div><div class="tam-track"><div class="tam-fill" style="width:20%;background:#85B7EB"><span>$500M–1B realistic 5yr capture</span></div></div></div>
+    </div>
+    <div class="tam-note" style="margin-bottom:20px">~100,000 licensed CRE brokers in the US. The top 10% (10,000 brokers) account for the majority of GCI. That is the target market.</div>
+    <table class="comp-table">
+      <thead><tr><th>Player</th><th>AI-Native</th><th>Good Splits</th><th>Full Stack</th><th>Marketplace</th><th>CRE-Specific</th></tr></thead>
+      <tbody>
+        <tr class="you"><td>Native AI Brokerage</td><td class="yes">Yes</td><td class="yes">80–90%</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
+        <tr><td>CBRE / JLL / Colliers</td><td class="no">No</td><td class="no">50–60%</td><td class="part">Partial</td><td class="no">No</td><td class="yes">Yes</td></tr>
+        <tr><td>Marcus &amp; Millichap</td><td class="no">No</td><td class="part">~55%</td><td class="no">No</td><td class="no">No</td><td class="yes">Yes</td></tr>
+        <tr><td>eXp Commercial</td><td class="no">No</td><td class="yes">80%+</td><td class="part">Partial</td><td class="no">No</td><td class="no">No</td></tr>
+        <tr><td>CoStar / Crexi</td><td class="part">Emerging</td><td class="no">N/A</td><td class="no">No</td><td class="part">Partial</td><td class="yes">Yes</td></tr>
+        <tr><td>Buildout / Apers</td><td class="part">Partial</td><td class="no">N/A</td><td class="no">No</td><td class="no">No</td><td class="yes">Yes</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+<div class="slide">
+  <div class="slide-num">10 / 12</div>
+  <div class="slide-inner">
+    <div class="eyebrow">Go-To-Market</div>
+    <div class="display sm">Four phases,<br><em>one clear flywheel</em></div>
+    <div class="body">The GTM is sequenced to build proof before scale — one marquee deal, then a wave of broker recruiting, then the content engine that makes the brand self-perpetuating.</div>
+    <div class="phase-list">
+      <div class="phase-item"><div class="phase-num">1</div><div class="phase-content"><div class="phase-title">Seed with 5–10 anchor brokers (Months 1–3)</div><div class="phase-desc">Start with producers who already have deal flow. Build the product around their actual workflows. Prove the OM generator saves them 8–10 hours per deal. These brokers become the case studies and recruiting assets for phase 3.</div></div></div>
+      <div class="phase-item"><div class="phase-num">2</div><div class="phase-content"><div class="phase-title">Close one marquee deal under the brand (Months 3–6)</div><div class="phase-desc">Nothing legitimizes a brokerage like a transaction. Target a $5–20M industrial or retail deal in target markets. Use it to produce a full AI-generated OM as a proof of concept to share with prospects.</div></div></div>
+      <div class="phase-item"><div class="phase-num">3</div><div class="phase-content"><div class="phase-title">Targeted broker recruiting campaign (Months 4–12)</div><div class="phase-desc">Target mid-market producers at M&amp;M, NAI, and Lee &amp; Associates doing $500K–2M GCI who are frustrated with their split. Run their personal P&amp;L for them in the pitch — the math is overwhelming. Show, don't tell.</div></div></div>
+      <div class="phase-item"><div class="phase-num">4</div><div class="phase-content"><div class="phase-title">Content + thought leadership flywheel (Ongoing)</div><div class="phase-desc">Publish AI-generated market reports, deal comps, and trend analyses publicly under the brand. This drives inbound for both brokers and clients, building brand equity without ad spend. The platform becomes a CRE media brand.</div></div></div>
+    </div>
+  </div>
+</div>
+<div class="slide">
+  <div class="slide-num">11 / 12</div>
+  <div class="slide-inner">
+    <div class="eyebrow">Key Risks</div>
+    <div class="display sm">What has to be<br><em>true for this to work</em></div>
+    <div class="risk-list">
+      <div class="risk-item"><div class="risk-dot"></div><div><div class="risk-title">Brand credibility cold start</div><div class="risk-desc">Institutional sellers may be reluctant to list with an unknown brand. Mitigation: seed with 5–10 high-producing brokers who bring existing relationships and a track record. The first marquee deal is existential — it needs to happen in months 3–6.</div></div></div>
+      <div class="risk-item"><div class="risk-dot"></div><div><div class="risk-title">Broker licensing + compliance overhead</div><div class="risk-desc">Operating a brokerage requires a designated broker in each state, E&amp;O insurance, and DRE compliance in every market. Manageable but real operational overhead. Budget $30–60K/year in legal and compliance before you're at meaningful scale.</div></div></div>
+      <div class="risk-item"><div class="risk-dot"></div><div><div class="risk-title">Legacy shops improve their tech</div><div class="risk-desc">CBRE, JLL, and M&amp;M will eventually improve their AI tooling. The moat is the data flywheel, the split economics, and the cultural identity — not features. First-mover advantage in broker recruiting matters more than feature parity with incumbents.</div></div></div>
+      <div class="risk-item"><div class="risk-dot"></div><div><div class="risk-title">Strategic decision: brokerage vs. SaaS</div><div class="risk-desc">Running a licensed brokerage has compliance and headcount overhead. A pure SaaS play (license the tech to independent brokers without running the brokerage) is cleaner but loses the commission upside and the brand story. The hybrid path — lightweight brokerage arm + licensable platform — is the optimal structure but adds complexity.</div></div></div>
+    </div>
+  </div>
+</div>
+<div class="slide verdict">
+  <div class="slide-num" style="color:rgba(255,255,255,0.2)">12 / 12</div>
+  <div class="slide-inner">
+    <div class="eyebrow" style="color:var(--blue-mid)">Bottom Line</div>
+    <div class="display sm" style="margin-bottom:16px">This is a real idea<br>with a <em>structural wedge</em></div>
+    <div class="body">The commission split model is genuinely broken and Compass proved in residential that you can disrupt it with better tech and better economics. The CRE version hasn't been built. The timing — with AI capable of replacing 90% of manual brokerage document work — has never been better.</div>
+    <div class="verdict-points">
+      <div class="verdict-point"><div class="vp-label">The wedge</div><div class="vp-body">Brokers are already paying $2,500/month for worse tools. You walk in cost-neutral on day one, before the split improvement even enters the conversation.</div></div>
+      <div class="verdict-point"><div class="vp-label">The defensibility</div><div class="vp-body">The two-sided marketplace creates a network effect. The data flywheel creates a compounding moat. Neither exists at any competitor today.</div></div>
+      <div class="verdict-point"><div class="vp-label">The analogy</div><div class="vp-body">Compass did this in residential ($10B+ company). eXp did it in residential without the AI ($4B company). Nobody has done it in commercial real estate.</div></div>
+      <div class="verdict-point"><div class="vp-label">The immediate next step</div><div class="vp-body">Evan Rose as founding broker. One listing under the brand. A working AI platform prototype. Three data points that turn this from a thesis into a company.</div></div>
+    </div>
+  </div>
+</div>
+</div>
+<script>
+const TIERS=[{name:'Core',price:1500,split:0.80,featured:false},{name:'Pro',price:2500,split:0.85,featured:true},{name:'Elite',price:3500,split:0.90,featured:false}];
+function fmt(n){return'$'+Math.round(n).toLocaleString();}
+function pct(n){return Math.round(n)+'%';}
+function renderCalc(){
+  const gci=parseInt(document.getElementById('gci-sl').value);
+  const legPct=parseInt(document.getElementById('leg-sl').value)/100;
+  document.getElementById('gci-disp').textContent=fmt(gci);
+  document.getElementById('leg-disp').textContent=pct(legPct*100);
+  const legNet=gci*legPct-30000;
+  document.getElementById('calc-tiers').innerHTML=TIERS.map(t=>{
+    const annCost=t.price*12,gross=gci*t.split,net=gross-annCost,diff=net-legNet,roi=Math.round((diff/Math.max(1,legNet))*100);
+    const feat=t.featured?'calc-tier feat':'calc-tier';
+    const badge=t.featured?'<div style="font-size:10px;font-weight:500;background:#e8effe;color:#0C447C;padding:3px 8px;border-radius:20px;display:inline-block;margin-bottom:6px">Most popular</div>':'<div style="height:22px"></div>';
+    return`<div class="${feat}">${badge}<div class="ct-name">${t.name}</div><div class="ct-price">${fmt(t.price)}<span style="font-size:12px;font-weight:400;color:#6b7280">/mo</span></div><div class="ct-split">${Math.round(t.split*100)}% split · ${fmt(annCost)}/yr</div><div class="ct-row"><span style="color:#6b7280">Gross keep</span><span class="ct-neu">${fmt(gross)}</span></div><div class="ct-row"><span style="color:#6b7280">Net take-home</span><span class="ct-pos">${fmt(net)}</span></div><div class="ct-row"><span style="color:#6b7280">vs. legacy shop</span><span class="${diff>=0?'ct-pos':'ct-neg'}">${diff>=0?'+':''}${fmt(diff)}</span></div><div class="ct-row"><span style="color:#6b7280">Platform ROI</span><span class="${roi>=0?'ct-pos':'ct-neg'}">${roi>=0?'+':''}${roi}%</span></div></div>`;
+  }).join('');
+  const maxNet=Math.max(legNet,...TIERS.map(t=>gci*t.split-t.price*12));
+  const bars=[{label:'Legacy shop',net:legNet,color:'#d1d0cb'},{label:'Core tier',net:gci*0.80-18000,color:'#888780'},{label:'Pro tier',net:gci*0.85-30000,color:'#2462F5'},{label:'Elite tier',net:gci*0.90-42000,color:'#0d1117'}];
+  document.getElementById('calc-bars-inner').innerHTML=bars.map(b=>{const w=Math.max(4,Math.round((b.net/maxNet)*100));return`<div class="bar-row"><div class="bar-label">${b.label}</div><div class="bar-track"><div class="bar-fill" style="width:${w}%;background:${b.color}"><span>${fmt(b.net)}</span></div></div></div>`;}).join('');
+  document.getElementById('calc-note').textContent=`At ${fmt(gci)} GCI with a ${pct(legPct*100)} legacy split: Pro tier costs the same as what the broker already pays in software ($30K/yr), while putting ${fmt(gci*0.85-30000-(gci*legPct-30000))} more in their pocket than their current shop. The platform is cost-neutral on day one — the split improvement is pure upside.`;
+}
+document.getElementById('gci-sl').addEventListener('input',renderCalc);
+document.getElementById('leg-sl').addEventListener('input',renderCalc);
+renderCalc();
+function renderARR(){
+  const brokers=parseInt(document.getElementById('arr-brokers').value);
+  const sub=parseInt(document.getElementById('arr-sub').value);
+  const gci=parseInt(document.getElementById('arr-gci').value);
+  document.getElementById('arr-brokers-disp').textContent=brokers.toLocaleString();
+  document.getElementById('arr-sub-disp').textContent=fmt(sub);
+  document.getElementById('arr-gci-disp').textContent='$'+Math.round(gci/1000)+'K';
+  const saasARR=brokers*sub*12,commRev=brokers*gci*0.15,totalRev=saasARR+commRev,ltv=sub*12*3;
+  document.getElementById('arr-results').innerHTML=`<div class="arr-result"><div class="ar-label">SaaS ARR</div><div class="ar-val blue">${saasARR>=1e6?'$'+(saasARR/1e6).toFixed(1)+'M':fmt(saasARR)}</div></div><div class="arr-result"><div class="ar-label">Commission Rev</div><div class="ar-val blue">${commRev>=1e6?'$'+(commRev/1e6).toFixed(1)+'M':fmt(commRev)}</div></div><div class="arr-result"><div class="ar-label">Total Revenue</div><div class="ar-val green">${totalRev>=1e6?'$'+(totalRev/1e6).toFixed(1)+'M':fmt(totalRev)}</div></div><div class="arr-result"><div class="ar-label">LTV / Broker (3yr)</div><div class="ar-val">${fmt(ltv)}</div></div>`;
+}
+document.getElementById('arr-brokers').addEventListener('input',renderARR);
+document.getElementById('arr-sub').addEventListener('input',renderARR);
+document.getElementById('arr-gci').addEventListener('input',renderARR);
+renderARR();
+</script>
+</body>
+</html>

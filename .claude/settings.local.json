@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh repo:*)",
+      "Bash(gh auth:*)",
+      "Bash(vercel --yes --name brokerage-deck)",
+      "Bash(npx vercel:*)",
+      "Bash(npx create-next-app@latest app --typescript --tailwind --eslint --app --src-dir --no-import-alias --use-npm)",
+      "Bash(npx create-next-app@latest app --typescript --tailwind --eslint --app --src-dir --use-npm --no-turbopack 2)",
+      "Bash(1:*)",
+      "Bash(npm install:*)",
+      "Bash(npx next:*)",
+      "Bash(git add:*)"
+    ]
+  }
+}

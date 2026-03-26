@@ -1,0 +1,18 @@
+# dependencies
+node_modules/
+.next/
+out/
+
+# env
+.env.local
+.env*.local
+
+# vercel
+.vercel
+
+# misc
+*.tsbuildinfo
+next-env.d.ts
+
+# broker materials (large PDFs)
+Broker Materials/
