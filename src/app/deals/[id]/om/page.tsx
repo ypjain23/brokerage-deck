@@ -27,6 +27,25 @@ const FIRM_OPTIONS: { key: FirmStyleKey; label: string }[] = [
   { key: 'newmark', label: 'Newmark' },
 ];
 
+// ─── Markdown Rendering Helper ────────────────────────────────────────────────
+
+function renderMarkdown(text: string): string {
+  let html = text
+    // Escape HTML first
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    // Bold: **text**
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    // Italic: *text* (but not inside strong tags)
+    .replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>')
+    // Paragraph breaks
+    .replace(/\n\n/g, '</p><p style="margin-top:0.5em;margin-bottom:0.5em;">')
+    // Single newlines to <br>
+    .replace(/\n/g, '<br/>');
+  return `<p style="margin-top:0;margin-bottom:0.5em;">${html}</p>`;
+}
+
 // ─── Formatting Helpers ────────────────────────────────────────────────────────
 
 function fmtNum(n: number | null | undefined): string {
@@ -1576,19 +1595,28 @@ export default function OMEditorPage() {
           // Editable text block
           const EditableText = ({ sectionIndex, fallback }: { sectionIndex: number | null; fallback: string }) => {
             const isEditing = sectionIndex !== null && editingIndex === sectionIndex;
+            const rawText = sectionIndex !== null && sections[sectionIndex] ? sections[sectionIndex].content : fallback;
+            if (isEditing) {
+              return (
+                <div
+                  ref={(el) => { if (sectionIndex !== null) sectionRefs.current[sectionIndex] = el; }}
+                  contentEditable
+                  suppressContentEditableWarning
+                  onClick={() => { if (sectionIndex !== null) handleSectionClick(sectionIndex); }}
+                  onBlur={() => { if (sectionIndex !== null) handleSectionBlur(sectionIndex); }}
+                  className="text-[10px] leading-relaxed text-[#374151] whitespace-pre-wrap outline-none cursor-text ring-2 ring-blue-200 rounded bg-blue-50/30 p-1"
+                >
+                  {rawText}
+                </div>
+              );
+            }
             return (
               <div
                 ref={(el) => { if (sectionIndex !== null) sectionRefs.current[sectionIndex] = el; }}
-                contentEditable={isEditing}
-                suppressContentEditableWarning
                 onClick={() => { if (sectionIndex !== null) handleSectionClick(sectionIndex); }}
-                onBlur={() => { if (sectionIndex !== null) handleSectionBlur(sectionIndex); }}
-                className={`text-[10px] leading-relaxed text-[#374151] whitespace-pre-wrap outline-none cursor-text ${
-                  isEditing ? 'ring-2 ring-blue-200 rounded bg-blue-50/30 p-1' : 'hover:bg-gray-50/50 rounded p-1 -m-1 transition-colors'
-                }`}
-              >
-                {sectionIndex !== null && sections[sectionIndex] ? sections[sectionIndex].content : fallback}
-              </div>
+                className="text-[10px] leading-relaxed text-[#374151] outline-none cursor-text hover:bg-gray-50/50 rounded p-1 -m-1 transition-colors"
+                dangerouslySetInnerHTML={{ __html: renderMarkdown(rawText) }}
+              />
             );
           };
 
@@ -1597,21 +1625,70 @@ export default function OMEditorPage() {
 
             {/* ════════ PAGE 1 — Cover ════════ */}
             <div className="aspect-[11/8.5] bg-[#0d1117] rounded-xl shadow-lg overflow-hidden relative" style={{ maxWidth: '960px', margin: '0 auto 2rem' }}>
-              <div className="flex flex-col items-center justify-center h-full px-12">
-                <p className="text-[10px] text-[#64748b] tracking-[3px] uppercase mb-6">{firmConfig.group}</p>
-                <p className="text-[10px] text-[#94b4fb] tracking-[4px] uppercase mb-4">{firmConfig.displayName}</p>
-                <h1 className="text-3xl font-bold text-white text-center mb-3" style={{ fontFamily: "'DM Serif Display', serif" }}>{propertyName}</h1>
-                <p className="text-xs text-[#94a3b8] text-center mb-5">{address}</p>
-                <p className="text-[10px] text-white/60 text-center tracking-wider mb-6">{coverMetrics}</p>
-                <div className="h-0.5 bg-[#2462F5] w-20 mb-6" />
+              {/* Hero photo area — top 55% */}
+              <div className="relative" style={{ height: '55%' }}>
+                {selectedPhotos[0] ? (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={selectedPhotos[0]} alt="Cover property photo" className="w-full h-full object-cover" />
+                    {/* Dark gradient overlay at bottom */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#0d1117] via-[#0d1117]/40 to-transparent" />
+                  </>
+                ) : (
+                  <div className="w-full h-full bg-gradient-to-b from-[#1a2332] to-[#0d1117] flex items-center justify-center">
+                    <p className="text-[11px] text-[#475569] tracking-wider">Add property photos to display cover image</p>
+                  </div>
+                )}
+              </div>
+              {/* Text overlay at bottom 45% */}
+              <div className="absolute bottom-0 left-0 right-0 flex flex-col items-center justify-center px-12" style={{ height: '50%' }}>
+                <p className="text-[10px] text-[#64748b] tracking-[3px] uppercase mb-4">{firmConfig.group}</p>
+                <p className="text-[10px] text-[#94b4fb] tracking-[4px] uppercase mb-3">{firmConfig.displayName}</p>
+                <h1 className="text-3xl font-bold text-white text-center mb-2" style={{ fontFamily: "'DM Serif Display', serif" }}>{propertyName}</h1>
+                <p className="text-xs text-[#94a3b8] text-center mb-4">{address}</p>
+                <p className="text-[10px] text-white/60 text-center tracking-wider mb-4">{coverMetrics}</p>
+                <div className="h-0.5 bg-[#2462F5] w-20 mb-4" />
                 <p className="text-[9px] text-[#475569] tracking-[3px] uppercase">CONFIDENTIAL OFFERING MEMORANDUM</p>
               </div>
             </div>
 
-            {/* ════════ PAGE 2 — Executive Summary ════════ */}
+            {/* ════════ PAGE 2 — Table of Contents ════════ */}
             <div className="aspect-[11/8.5] bg-white rounded-xl shadow-lg overflow-hidden relative" style={{ maxWidth: '960px', margin: '0 auto 2rem' }}>
               <NavyHeader />
-              <div className="flex gap-5 p-6 h-[calc(100%-2.25rem)]">
+              <div className="p-6 h-[calc(100%-2.25rem)] flex flex-col justify-center px-16">
+                <h2 className="text-xl font-bold text-[#0d1117] mb-1 tracking-wider uppercase">Table of Contents</h2>
+                <div className="h-0.5 bg-[#2462F5] w-16 mb-8" />
+                <div className="space-y-4">
+                  {[
+                    { num: '01', title: 'EXECUTIVE SUMMARY' },
+                    { num: '02', title: 'PROPERTY DESCRIPTION' },
+                    { num: '03', title: 'PROPERTY PHOTOS' },
+                    { num: '04', title: 'LOCATION OVERVIEW' },
+                    { num: '05', title: 'TENANT & LEASE SUMMARIES' },
+                    { num: '06', title: 'FINANCIAL ANALYSIS' },
+                    { num: '07', title: 'MARKET OVERVIEW' },
+                  ].map((item) => (
+                    <div key={item.num} className="flex items-center gap-6">
+                      <span className="text-2xl font-bold text-[#2462F5] w-10">{item.num}</span>
+                      <div className="flex-1 border-b border-[#e5e5e5]" />
+                      <span className="text-[11px] font-semibold text-[#0d1117] tracking-[2px]">{item.title}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <PageNum num={2} />
+            </div>
+
+            {/* ════════ PAGE 3 — Executive Summary ════════ */}
+            <div className="aspect-[11/8.5] bg-white rounded-xl shadow-lg overflow-hidden relative" style={{ maxWidth: '960px', margin: '0 auto 2rem' }}>
+              <div className="h-16 bg-[#0d1117] flex items-center justify-between px-6">
+                <div className="flex items-center gap-4">
+                  <span className="text-xl font-bold text-white/90">01</span>
+                  <span className="text-[11px] text-white/80 tracking-[2px] uppercase font-semibold">Executive Summary</span>
+                </div>
+                <span className="text-[10px] text-white/60">{propertyName}</span>
+              </div>
+              <div className="flex gap-5 p-6 h-[calc(100%-4rem)]">
                 {/* Left 55% */}
                 <div className="w-[55%] flex flex-col">
                   <h2 className="text-lg font-bold text-[#0d1117] mb-1">Executive Summary</h2>
@@ -1620,19 +1697,37 @@ export default function OMEditorPage() {
                     <EditableText sectionIndex={execSummary?.index ?? null} fallback={`${firmConfig.openingPhrase} ${propertyName}, a ${fmtNum(totalSf)} SF ${propertyType.toLowerCase()} property located at ${address}.`} />
                   </div>
                   {/* Investment Highlights */}
-                  {deal?.highlights && deal.highlights.length > 0 && (
-                    <div className="mt-3">
-                      <p className="text-[10px] font-bold text-[#0d1117] mb-2 uppercase tracking-wider">Investment Highlights</p>
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                        {deal.highlights.slice(0, 8).map((h, i) => (
-                          <div key={i} className="flex items-start gap-1.5">
-                            <span className="w-1.5 h-1.5 rounded-full bg-[#2462F5] mt-1 flex-shrink-0" />
-                            <span className="text-[9px] text-[#374151] leading-tight">{h}</span>
-                          </div>
-                        ))}
+                  {(() => {
+                    const highlightItems: string[] = (() => {
+                      if (deal?.highlights && deal.highlights.length > 0) return deal.highlights;
+                      const ihField = (deal as Record<string, unknown>)?.investment_highlights;
+                      if (typeof ihField === 'string' && ihField.trim()) return ihField.split('\n').filter((l: string) => l.trim());
+                      return [
+                        `${occupancy}% leased ${assetClass.toLowerCase()} investment`,
+                        `${fmtNum(totalSf)} SF on ${landAcres} acres in ${submarket}`,
+                        `${waltYears} Year WALT with scheduled rent growth`,
+                        `Functional ${propertyType.toLowerCase()} with ${clearHeight}, ${dockDoors} dock doors`,
+                      ];
+                    })();
+                    return (
+                      <div className="mt-3">
+                        <p className="text-[10px] font-bold text-[#0d1117] mb-2 uppercase tracking-wider">Investment Highlights</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {highlightItems.slice(0, 6).map((h, i) => {
+                            const parts = h.split(/[.!:]/);
+                            const title = parts[0]?.trim() || h;
+                            const rest = parts.length > 1 ? parts.slice(1).join('.').trim() : '';
+                            return (
+                              <div key={i} className="bg-[#f8f7f4] rounded-md p-2.5 border-l-[3px] border-[#2462F5]">
+                                <p className="text-[9px] font-bold text-[#0d1117] leading-tight mb-0.5">{title}</p>
+                                {rest && <p className="text-[8px] text-[#374151] leading-snug">{rest}</p>}
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
                 {/* Right 45% — Investment Snapshot */}
                 <div className="w-[45%]">
@@ -1658,10 +1753,10 @@ export default function OMEditorPage() {
                   </div>
                 </div>
               </div>
-              <PageNum num={2} />
+              <PageNum num={3} />
             </div>
 
-            {/* ════════ PAGE 3 — Property Photos ════════ */}
+            {/* ════════ PAGE 4 — Property Photos ════════ */}
             <div className="aspect-[11/8.5] bg-white rounded-xl shadow-lg overflow-hidden relative" style={{ maxWidth: '960px', margin: '0 auto 2rem' }}>
               <NavyHeader />
               <div className="p-6 h-[calc(100%-2.25rem)] flex flex-col">
@@ -1690,10 +1785,10 @@ export default function OMEditorPage() {
                   ))}
                 </div>
               </div>
-              <PageNum num={3} />
+              <PageNum num={4} />
             </div>
 
-            {/* ════════ PAGE 4 — Aerial / Location ════════ */}
+            {/* ════════ PAGE 5 — Aerial / Location ════════ */}
             <div className="aspect-[11/8.5] bg-white rounded-xl shadow-lg overflow-hidden relative" style={{ maxWidth: '960px', margin: '0 auto 2rem' }}>
               <NavyHeader />
               <div className="p-6 h-[calc(100%-2.25rem)] flex flex-col">
@@ -1713,13 +1808,19 @@ export default function OMEditorPage() {
                   ))}
                 </div>
               </div>
-              <PageNum num={4} />
+              <PageNum num={5} />
             </div>
 
-            {/* ════════ PAGE 5 — Property Description ════════ */}
+            {/* ════════ PAGE 6 — Property Description ════════ */}
             <div className="aspect-[11/8.5] bg-white rounded-xl shadow-lg overflow-hidden relative" style={{ maxWidth: '960px', margin: '0 auto 2rem' }}>
-              <NavyHeader />
-              <div className="flex gap-5 p-6 h-[calc(100%-2.25rem)]">
+              <div className="h-16 bg-[#0d1117] flex items-center justify-between px-6">
+                <div className="flex items-center gap-4">
+                  <span className="text-xl font-bold text-white/90">02</span>
+                  <span className="text-[11px] text-white/80 tracking-[2px] uppercase font-semibold">Property Description</span>
+                </div>
+                <span className="text-[10px] text-white/60">{propertyName}</span>
+              </div>
+              <div className="flex gap-5 p-6 h-[calc(100%-4rem)]">
                 {/* Left 58% */}
                 <div className="w-[58%] flex flex-col">
                   <h2 className="text-lg font-bold text-[#0d1117] mb-1">Property Description</h2>
@@ -1752,13 +1853,19 @@ export default function OMEditorPage() {
                   </div>
                 </div>
               </div>
-              <PageNum num={5} />
+              <PageNum num={6} />
             </div>
 
-            {/* ════════ PAGE 6 — Tenant Overview ════════ */}
+            {/* ════════ PAGE 7 — Tenant Overview ════════ */}
             <div className="aspect-[11/8.5] bg-white rounded-xl shadow-lg overflow-hidden relative" style={{ maxWidth: '960px', margin: '0 auto 2rem' }}>
-              <NavyHeader />
-              <div className="p-6 h-[calc(100%-2.25rem)] flex flex-col">
+              <div className="h-16 bg-[#0d1117] flex items-center justify-between px-6">
+                <div className="flex items-center gap-4">
+                  <span className="text-xl font-bold text-white/90">04</span>
+                  <span className="text-[11px] text-white/80 tracking-[2px] uppercase font-semibold">Tenant &amp; Lease Summaries</span>
+                </div>
+                <span className="text-[10px] text-white/60">{propertyName}</span>
+              </div>
+              <div className="p-6 h-[calc(100%-4rem)] flex flex-col">
                 <h2 className="text-lg font-bold text-[#0d1117] mb-1">Tenant &amp; Lease Summary</h2>
                 <div className="h-0.5 bg-[#2462F5] w-12 mb-3" />
                 {/* Top metric cards */}
@@ -1812,13 +1919,19 @@ export default function OMEditorPage() {
                   </table>
                 </div>
               </div>
-              <PageNum num={6} />
+              <PageNum num={7} />
             </div>
 
-            {/* ════════ PAGE 7 — Financial Summary ════════ */}
+            {/* ════════ PAGE 8 — Financial Summary ════════ */}
             <div className="aspect-[11/8.5] bg-white rounded-xl shadow-lg overflow-hidden relative" style={{ maxWidth: '960px', margin: '0 auto 2rem' }}>
-              <NavyHeader />
-              <div className="flex gap-5 p-6 h-[calc(100%-2.25rem)]">
+              <div className="h-16 bg-[#0d1117] flex items-center justify-between px-6">
+                <div className="flex items-center gap-4">
+                  <span className="text-xl font-bold text-white/90">05</span>
+                  <span className="text-[11px] text-white/80 tracking-[2px] uppercase font-semibold">Financial Analysis</span>
+                </div>
+                <span className="text-[10px] text-white/60">{propertyName}</span>
+              </div>
+              <div className="flex gap-5 p-6 h-[calc(100%-4rem)]">
                 {/* Left 55% — Pro Forma */}
                 <div className="w-[55%] flex flex-col">
                   <h2 className="text-lg font-bold text-[#0d1117] mb-1">Financial Analysis</h2>
@@ -1871,13 +1984,19 @@ export default function OMEditorPage() {
                   </div>
                 </div>
               </div>
-              <PageNum num={7} />
+              <PageNum num={8} />
             </div>
 
-            {/* ════════ PAGE 8 — Market Overview ════════ */}
+            {/* ════════ PAGE 9 — Market Overview ════════ */}
             <div className="aspect-[11/8.5] bg-white rounded-xl shadow-lg overflow-hidden relative" style={{ maxWidth: '960px', margin: '0 auto 2rem' }}>
-              <NavyHeader />
-              <div className="flex gap-5 p-6 h-[calc(100%-2.25rem)]">
+              <div className="h-16 bg-[#0d1117] flex items-center justify-between px-6">
+                <div className="flex items-center gap-4">
+                  <span className="text-xl font-bold text-white/90">03</span>
+                  <span className="text-[11px] text-white/80 tracking-[2px] uppercase font-semibold">Area &amp; Market Overview</span>
+                </div>
+                <span className="text-[10px] text-white/60">{propertyName}</span>
+              </div>
+              <div className="flex gap-5 p-6 h-[calc(100%-4rem)]">
                 {/* Left 55% */}
                 <div className="w-[55%] flex flex-col">
                   <h2 className="text-lg font-bold text-[#0d1117] mb-1">Market Overview</h2>
@@ -1907,10 +2026,10 @@ export default function OMEditorPage() {
                   </div>
                 </div>
               </div>
-              <PageNum num={8} />
+              <PageNum num={9} />
             </div>
 
-            {/* ════════ PAGE 9 — Disclaimer ════════ */}
+            {/* ════════ PAGE 10 — Disclaimer ════════ */}
             <div className="aspect-[11/8.5] bg-white rounded-xl shadow-lg overflow-hidden relative" style={{ maxWidth: '960px', margin: '0 auto 2rem' }}>
               <NavyHeader />
               <div className="p-6 h-[calc(100%-2.25rem)] flex flex-col">
@@ -1923,7 +2042,7 @@ export default function OMEditorPage() {
                   <p className="text-[9px] text-[#6b7280] text-center">{firmConfig.displayName} &bull; {firmConfig.group} &bull; 2026</p>
                 </div>
               </div>
-              <PageNum num={9} />
+              <PageNum num={10} />
             </div>
 
           </div>
