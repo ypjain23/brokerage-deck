@@ -524,9 +524,13 @@ export default function OMEditorPage() {
           <div
             style={{
               transform: 'scale(0.55)',
-              transformOrigin: 'top center',
+              transformOrigin: 'top left',
               width: 1056,
+              height: (24 * 816 + 23 * 24 + 48) * 0.55,
               margin: '0 auto',
+              position: 'relative',
+              left: '50%',
+              marginLeft: -1056 * 0.55 / 2,
             }}
           >
             <CushmanOM data={omData} onSectionChange={handleSectionChange} />
