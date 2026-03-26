@@ -12,7 +12,9 @@
       "Bash(npx next:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} %{redirect_url}\" https://brokerage-deck.vercel.app/)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" https://brokerage-deck.vercel.app/deals)"
     ]
   }
 }

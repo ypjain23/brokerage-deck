@@ -71,9 +71,11 @@ No markdown formatting around the JSON.`;
     const text = message.content[0].type === 'text' ? message.content[0].text : '';
     const parsed = JSON.parse(text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim());
 
-    return NextResponse.json({ success: true, data: parsed });
+    return NextResponse.json({ sections: parsed.sections });
   } catch (error: any) {
     console.error('Generate OM error:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
+export const maxDuration = 60;

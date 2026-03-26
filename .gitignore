@@ -16,3 +16,5 @@ next-env.d.ts
 
 # broker materials (large PDFs)
 Broker Materials/
+
+.vercel

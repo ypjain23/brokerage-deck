@@ -58,3 +58,5 @@ No markdown formatting around the JSON. Sale prices should be whole numbers. Pri
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
+
+export const maxDuration = 60;

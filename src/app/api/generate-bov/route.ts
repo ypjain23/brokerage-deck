@@ -50,3 +50,5 @@ No markdown formatting around the JSON. All dollar values should be whole number
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
+
+export const maxDuration = 60;
