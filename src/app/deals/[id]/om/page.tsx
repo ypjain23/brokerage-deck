@@ -1,11 +1,15 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase, BrokerDeal } from '@/lib/supabase';
 import { WINCHESTER_SEED } from '@/lib/seed-data';
 import { FIRM_STYLES, FirmStyleKey } from '@/lib/firm-styles';
+import { CushmanOM } from '@/templates/cushman/CushmanOM';
+import type { CushmanOMData } from '@/templates/cushman/types';
+
+// ─── Types ───────────────────────────────────────────────────────────────────
 
 type OMSection = {
   title: string;
@@ -27,72 +31,30 @@ const FIRM_OPTIONS: { key: FirmStyleKey; label: string }[] = [
   { key: 'newmark', label: 'Newmark' },
 ];
 
-// ─── Markdown Rendering Helper ────────────────────────────────────────────────
-
-function renderMarkdown(text: string): string {
-  let html = text
-    // Escape HTML first
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    // Bold: **text**
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    // Italic: *text* (but not inside strong tags)
-    .replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>')
-    // Paragraph breaks
-    .replace(/\n\n/g, '</p><p style="margin-top:0.5em;margin-bottom:0.5em;">')
-    // Single newlines to <br>
-    .replace(/\n/g, '<br/>');
-  return `<p style="margin-top:0;margin-bottom:0.5em;">${html}</p>`;
-}
-
-// ─── Formatting Helpers ────────────────────────────────────────────────────────
-
-function fmtNum(n: number | null | undefined): string {
-  if (n == null) return '--';
-  return n.toLocaleString('en-US');
-}
-
-function fmtDollar(n: number | null | undefined): string {
-  if (n == null) return '--';
-  return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-}
-
-function fmtDollarDec(n: number | null | undefined): string {
-  if (n == null) return '--';
-  return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function fmtPct(n: number | null | undefined): string {
-  if (n == null) return '--';
-  return n.toFixed(1) + '%';
-}
+// ─── Component ───────────────────────────────────────────────────────────────
 
 export default function OMEditorPage() {
   const params = useParams();
   const id = params.id as string;
 
   const [deal, setDeal] = useState<Partial<BrokerDeal> | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [sections, setSections] = useState<OMSection[]>([]);
+  const [sections, setSections] = useState<{ title: string; content: string }[]>([]);
   const [selectedFirmStyle, setSelectedFirmStyle] = useState<FirmStyleKey>('cushman');
+  const [selectedPhotos, setSelectedPhotos] = useState<string[]>([]);
   const [generating, setGenerating] = useState(false);
   const [generateProgress, setGenerateProgress] = useState(0);
-  const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [savedIndex, setSavedIndex] = useState<number | null>(null);
-  const [exportingPdf, setExportingPdf] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   // Photo picker state
-  const [selectedPhotos, setSelectedPhotos] = useState<string[]>([]);
   const [showPhotoPicker, setShowPhotoPicker] = useState(false);
   const [availablePhotos, setAvailablePhotos] = useState<string[]>([]);
   const [dragFrom, setDragFrom] = useState<number | null>(null);
   const [dragOver, setDragOver] = useState<number | null>(null);
 
-  const sectionRefs = useRef<(HTMLDivElement | null)[]>([]);
-  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ─── Fetch Deal ───────────────────────────────────────────────────────────────
+  // ─── Fetch Deal ─────────────────────────────────────────────────────────────
 
   useEffect(() => {
     async function fetchDeal() {
@@ -147,7 +109,7 @@ export default function OMEditorPage() {
     fetchDeal();
   }, [id]);
 
-  // ─── Fetch available photos from broker-docs bucket ───────────────────────────
+  // ─── Fetch available photos ─────────────────────────────────────────────────
 
   useEffect(() => {
     async function fetchAvailablePhotos() {
@@ -172,10 +134,9 @@ export default function OMEditorPage() {
           setAvailablePhotos(urls);
         }
       } catch {
-        // If bucket listing fails, use deal photos as fallback
+        // Silently fail
       }
 
-      // Also add deal.photos if present
       if (deal?.photos && deal.photos.length > 0) {
         setAvailablePhotos((prev) => {
           const combined = [...new Set([...prev, ...deal.photos!])];
@@ -189,7 +150,7 @@ export default function OMEditorPage() {
     }
   }, [deal, id]);
 
-  // ─── Save draft to supabase ───────────────────────────────────────────────────
+  // ─── Save draft ─────────────────────────────────────────────────────────────
 
   const saveDraft = useCallback(
     async (updatedSections: OMSection[], photos?: string[]) => {
@@ -214,7 +175,17 @@ export default function OMEditorPage() {
     [id, selectedFirmStyle, selectedPhotos]
   );
 
-  // ─── Generate OM Sections ─────────────────────────────────────────────────────
+  const debouncedSaveDraft = useCallback(
+    (updatedSections: OMSection[], photos?: string[]) => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => {
+        saveDraft(updatedSections, photos);
+      }, 1000);
+    },
+    [saveDraft]
+  );
+
+  // ─── Generate OM ────────────────────────────────────────────────────────────
 
   async function generateOMSections() {
     if (!deal) return;
@@ -222,7 +193,6 @@ export default function OMEditorPage() {
     setGenerating(true);
     setGenerateProgress(0);
 
-    // Simulate progress
     const progressInterval = setInterval(() => {
       setGenerateProgress((prev) => {
         if (prev >= 90) return prev;
@@ -252,7 +222,6 @@ export default function OMEditorPage() {
       await saveDraft(generatedSections);
     } catch (err) {
       console.error('Error generating OM:', err);
-      // Fallback: generate placeholder sections from firm style
       const firmConfig = FIRM_STYLES[selectedFirmStyle];
       const fallbackSections: OMSection[] = firmConfig.sectionOrder.map((title) => ({
         title,
@@ -267,33 +236,37 @@ export default function OMEditorPage() {
     }
   }
 
-  // ─── Section Editing ──────────────────────────────────────────────────────────
+  // ─── Section change handler ─────────────────────────────────────────────────
 
-  function handleSectionClick(index: number) {
-    setEditingIndex(index);
-  }
-
-  async function handleSectionBlur(index: number) {
-    const el = sectionRefs.current[index];
-    if (!el) return;
-
-    const newContent = el.innerText;
+  function handleSectionChange(index: number, newContent: string) {
     const updatedSections = [...sections];
     updatedSections[index] = { ...updatedSections[index], content: newContent };
     setSections(updatedSections);
-    setEditingIndex(null);
-
-    await saveDraft(updatedSections);
-
-    // Show "Saved" flash
-    setSavedIndex(index);
-    if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
-    savedTimerRef.current = setTimeout(() => {
-      setSavedIndex(null);
-    }, 2000);
+    debouncedSaveDraft(updatedSections);
   }
 
-  // ─── Photo Drag & Drop ───────────────────────────────────────────────────────
+  // ─── Export PDF ─────────────────────────────────────────────────────────────
+
+  function handleExportPdf() {
+    const printWindow = window.open(`/deals/${id}/om/print`, '_blank');
+    if (printWindow) {
+      printWindow.addEventListener('load', () => {
+        setTimeout(() => {
+          printWindow.print();
+        }, 1500);
+      });
+    }
+  }
+
+  // ─── Photo picker handlers ─────────────────────────────────────────────────
+
+  function togglePhotoSelection(url: string) {
+    setSelectedPhotos((prev) => {
+      const next = prev.includes(url) ? prev.filter((p) => p !== url) : [...prev, url];
+      debouncedSaveDraft(sections, next);
+      return next;
+    });
+  }
 
   function handlePhotoDragStart(index: number) {
     setDragFrom(index);
@@ -310,1874 +283,398 @@ export default function OMEditorPage() {
       setDragOver(null);
       return;
     }
-
-    const newPhotos = [...selectedPhotos];
-    const [removed] = newPhotos.splice(dragFrom, 1);
-    newPhotos.splice(index, 0, removed);
-    setSelectedPhotos(newPhotos);
+    const reordered = [...selectedPhotos];
+    const [moved] = reordered.splice(dragFrom, 1);
+    reordered.splice(index, 0, moved);
+    setSelectedPhotos(reordered);
+    debouncedSaveDraft(sections, reordered);
     setDragFrom(null);
     setDragOver(null);
-
-    saveDraft(sections, newPhotos);
   }
 
-  function togglePhotoSelection(url: string) {
-    setSelectedPhotos((prev) => {
-      if (prev.includes(url)) {
-        return prev.filter((p) => p !== url);
-      }
-      return [...prev, url];
-    });
-  }
-
-  // ─── Export PDF ───────────────────────────────────────────────────────────────
-
-  async function fetchImageAsBase64(url: string): Promise<string> {
-    try {
-      const response = await fetch(url);
-      const blob = await response.blob();
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-    } catch {
-      return '';
-    }
-  }
-
-  async function handleExportPdf() {
-    if (!deal) return;
-
-    setExportingPdf(true);
-
-    try {
-      // Pre-fetch all photo URLs and convert to base64
-      const photoBase64Map: Record<string, string> = {};
-      for (const photoUrl of selectedPhotos) {
-        const base64 = await fetchImageAsBase64(photoUrl);
-        if (base64) {
-          photoBase64Map[photoUrl] = base64;
-        }
-      }
-
-      // Dynamically import @react-pdf/renderer
-      const {
-        Document,
-        Page,
-        Text,
-        View,
-        Image,
-        StyleSheet,
-        pdf,
-      } = await import('@react-pdf/renderer');
-
-      const firmConfig = FIRM_STYLES[selectedFirmStyle];
-
-      // ─── Design Tokens ──────────────────────────────────────────────
-      const NAVY = '#0d1117';
-      const NAVY_HEADER = '#0f172a';
-      const BLUE_ACCENT = '#2462F5';
-      const BLUE_LIGHT = '#3b82f6';
-      const CARD_BG = '#f8f7f4';
-      const CARD_BORDER = '#e5e5e5';
-      const TEXT_DARK = '#1a1a1a';
-      const TEXT_BODY = '#374151';
-      const TEXT_MUTED = '#6b7280';
-      const TEXT_LIGHT_MUTED = '#9ca3af';
-      const WHITE = '#ffffff';
-      const TABLE_ALT_ROW = '#f9fafb';
-
-      // ─── Computed deal values ───────────────────────────────────────
-      const propertyName = deal.property_name || 'Property';
-      const address = [deal.address, deal.city, deal.state, deal.zip]
-        .filter(Boolean)
-        .join(', ');
-      const totalSf = deal.total_sf || 275243;
-      const landAcres = deal.land_area_acres || 12.03;
-      const yearBuilt = deal.year_built || 2001;
-      const occupancy = deal.occupancy_pct ?? 100;
-      const waltYears = deal.walt || 4.5;
-      const clearHeight = deal.clear_height || "32' clear";
-      const dockDoors = deal.dock_doors ?? 44;
-      const gradeDoors = deal.grade_doors ?? 4;
-      const numTenants = deal.num_tenants ?? 1;
-      const numBuildings = deal.num_buildings ?? 1;
-      const parking = deal.parking_spaces ?? 226;
-      const zoning = deal.zoning || 'LI (Light Industrial)';
-      const submarket = deal.submarket || 'Inland Empire South';
-      const county = deal.county || 'Riverside';
-      const askingPrice = deal.asking_price || 45000000;
-      const capRate = deal.cap_rate || 5.25;
-      const pricePerSf = deal.price_per_sf || (askingPrice / totalSf);
-      const noi = deal.noi || (askingPrice * capRate / 100);
-      const assetClass = deal.asset_class || 'Single-Tenant NNN';
-      const propertyType = deal.property_type || 'Industrial';
-
-      // Helper to find section content by fuzzy title match
-      function findSectionContent(keywords: string[]): string {
-        for (const kw of keywords) {
-          const found = sections.find((s) =>
-            s.title.toLowerCase().includes(kw.toLowerCase())
-          );
-          if (found) return found.content;
-        }
-        return '';
-      }
-
-      const execSummaryText = findSectionContent(['executive summary', 'summary']) ||
-        `${firmConfig.openingPhrase} ${propertyName}, a ${fmtNum(totalSf)} square foot ${propertyType.toLowerCase()} property located at ${address}. The ${assetClass.toLowerCase()} asset is ${occupancy}% leased with ${waltYears} years of weighted average lease term remaining. The property features ${clearHeight} clear heights, ${dockDoors} dock-high doors, and ${gradeDoors} grade-level doors, situated on ${landAcres} acres in the ${submarket} submarket.`;
-
-      const propertyDescText = findSectionContent(['property description', 'property overview', 'property & tenancy']) ||
-        `${propertyName} is a ${fmtNum(totalSf)} square foot ${propertyType.toLowerCase()} facility built in ${yearBuilt}, situated on approximately ${landAcres} acres in ${deal.city || 'Temecula'}, ${deal.state || 'CA'}. The building features ${clearHeight} clear heights, ${dockDoors} dock-high loading doors, and ${gradeDoors} grade-level doors, providing exceptional functionality for warehouse and distribution operations. The property includes ${parking} parking spaces and is zoned ${zoning}. The ${submarket} submarket benefits from proximity to major transportation corridors and a growing population base, making this an attractive logistics location.`;
-
-      const marketOverviewText = findSectionContent(['market overview', 'market context', 'area overview', 'market highlights']) ||
-        `The ${submarket} submarket in ${county} County continues to demonstrate strong industrial fundamentals. The region benefits from its strategic location along major transportation corridors, providing access to key distribution networks throughout Southern California. Industrial vacancy rates in the submarket remain historically low, driven by sustained demand from e-commerce, logistics, and last-mile delivery operators. Limited developable land and restrictive zoning policies continue to constrain new supply, supporting rent growth and value appreciation for existing assets.`;
-
-      const tenantOverviewText = findSectionContent(['tenant', 'lease']) ||
-        `The property is ${occupancy}% leased with ${waltYears} years of weighted average lease term remaining. The current lease structure provides stable, predictable cash flow with scheduled rent escalations throughout the term.`;
-
-      // ─── Photo base64 array (up to 4) ──────────────────────────────
-      const photoB64Array: string[] = [];
-      for (let i = 0; i < Math.min(selectedPhotos.length, 4); i++) {
-        const b64 = photoBase64Map[selectedPhotos[i]];
-        if (b64) photoB64Array.push(b64);
-      }
-
-      // ─── PDF Styles ────────────────────────────────────────────────
-      const s = StyleSheet.create({
-        // ── Landscape page base ──
-        landscapePage: {
-          width: 792,
-          height: 612,
-          fontFamily: 'Helvetica',
-          fontSize: 10,
-          color: TEXT_DARK,
-          position: 'relative' as const,
-        },
-
-        // ── Cover page ──
-        coverPage: {
-          width: 792,
-          height: 612,
-          backgroundColor: NAVY,
-          padding: 0,
-          display: 'flex',
-          flexDirection: 'column' as const,
-          alignItems: 'center' as const,
-          justifyContent: 'center' as const,
-          position: 'relative' as const,
-        },
-        coverFirmLine: {
-          fontSize: 9,
-          color: '#64748b',
-          letterSpacing: 3,
-          textTransform: 'uppercase' as const,
-          textAlign: 'center' as const,
-          marginBottom: 24,
-          paddingHorizontal: 60,
-        },
-        coverPropertyName: {
-          fontSize: 36,
-          fontFamily: 'Helvetica-Bold',
-          color: WHITE,
-          textAlign: 'center' as const,
-          marginBottom: 12,
-          paddingHorizontal: 60,
-        },
-        coverAddress: {
-          fontSize: 13,
-          color: '#94a3b8',
-          textAlign: 'center' as const,
-          marginBottom: 28,
-        },
-        coverMetricsLine: {
-          fontSize: 10,
-          color: '#cbd5e1',
-          textAlign: 'center' as const,
-          letterSpacing: 1.5,
-          marginBottom: 28,
-          paddingHorizontal: 40,
-        },
-        coverDivider: {
-          width: 100,
-          height: 3,
-          backgroundColor: BLUE_ACCENT,
-          marginBottom: 28,
-        },
-        coverConfidential: {
-          fontSize: 10,
-          color: '#475569',
-          letterSpacing: 3,
-          textTransform: 'uppercase' as const,
-          textAlign: 'center' as const,
-        },
-
-        // ── Navy header bar (non-cover pages) ──
-        headerBar: {
-          height: 36,
-          backgroundColor: NAVY_HEADER,
-          flexDirection: 'row' as const,
-          alignItems: 'center' as const,
-          paddingHorizontal: 36,
-          justifyContent: 'space-between' as const,
-        },
-        headerBarText: {
-          fontSize: 8,
-          color: '#94a3b8',
-          letterSpacing: 2,
-          textTransform: 'uppercase' as const,
-        },
-
-        // ── Page body ──
-        pageBody: {
-          flex: 1,
-          padding: 36,
-          paddingTop: 24,
-        },
-
-        // ── Section header ──
-        sectionHeader: {
-          fontSize: 20,
-          fontFamily: 'Helvetica-Bold',
-          color: NAVY_HEADER,
-          marginBottom: 4,
-        },
-        sectionHeaderUnderline: {
-          width: 60,
-          height: 3,
-          backgroundColor: BLUE_ACCENT,
-          marginBottom: 20,
-        },
-
-        // ── Callout card ──
-        calloutCard: {
-          backgroundColor: CARD_BG,
-          borderRadius: 8,
-          border: `1px solid ${CARD_BORDER}`,
-          borderWidth: 1,
-          borderColor: CARD_BORDER,
-          padding: 16,
-        },
-        calloutCardTitle: {
-          fontSize: 12,
-          fontFamily: 'Helvetica-Bold',
-          color: NAVY_HEADER,
-          marginBottom: 12,
-          paddingBottom: 6,
-          borderBottomWidth: 2,
-          borderBottomColor: BLUE_ACCENT,
-        },
-
-        // ── Metric items ──
-        metricValue: {
-          fontSize: 20,
-          fontFamily: 'Helvetica-Bold',
-          color: TEXT_DARK,
-        },
-        metricLabel: {
-          fontSize: 7,
-          color: TEXT_MUTED,
-          textTransform: 'uppercase' as const,
-          letterSpacing: 0.5,
-          marginTop: 2,
-        },
-
-        // ── Body text ──
-        bodyText: {
-          fontSize: 9,
-          lineHeight: 1.7,
-          color: TEXT_BODY,
-          textAlign: 'justify' as const,
-        },
-
-        // ── Table styles ──
-        tableHeaderRow: {
-          flexDirection: 'row' as const,
-          backgroundColor: BLUE_ACCENT,
-          paddingVertical: 6,
-          paddingHorizontal: 8,
-          borderTopLeftRadius: 4,
-          borderTopRightRadius: 4,
-        },
-        tableHeaderCell: {
-          fontSize: 7,
-          fontFamily: 'Helvetica-Bold',
-          color: WHITE,
-          textTransform: 'uppercase' as const,
-          letterSpacing: 0.5,
-        },
-        tableRow: {
-          flexDirection: 'row' as const,
-          paddingVertical: 5,
-          paddingHorizontal: 8,
-          borderBottomWidth: 0.5,
-          borderBottomColor: '#e5e7eb',
-        },
-        tableRowAlt: {
-          flexDirection: 'row' as const,
-          paddingVertical: 5,
-          paddingHorizontal: 8,
-          backgroundColor: TABLE_ALT_ROW,
-          borderBottomWidth: 0.5,
-          borderBottomColor: '#e5e7eb',
-        },
-        tableCell: {
-          fontSize: 8,
-          color: TEXT_BODY,
-        },
-
-        // ── Page footer ──
-        pageFooter: {
-          position: 'absolute' as const,
-          bottom: 16,
-          left: 36,
-          right: 36,
-          flexDirection: 'row' as const,
-          justifyContent: 'space-between' as const,
-          alignItems: 'center' as const,
-        },
-        pageFooterText: {
-          fontSize: 7,
-          color: TEXT_LIGHT_MUTED,
-        },
-
-        // ── Placeholder box ──
-        placeholderBox: {
-          backgroundColor: '#e2e8f0',
-          borderRadius: 6,
-          display: 'flex' as const,
-          alignItems: 'center' as const,
-          justifyContent: 'center' as const,
-        },
-        placeholderText: {
-          fontSize: 11,
-          color: TEXT_MUTED,
-          fontFamily: 'Helvetica-Bold',
-        },
-
-        // ── Two-column layout ──
-        row: {
-          flexDirection: 'row' as const,
-        },
-
-        // ── Highlight card ──
-        highlightCard: {
-          backgroundColor: CARD_BG,
-          borderRadius: 6,
-          borderWidth: 1,
-          borderColor: CARD_BORDER,
-          padding: 10,
-          flexDirection: 'row' as const,
-          alignItems: 'flex-start' as const,
-        },
-        highlightDot: {
-          width: 6,
-          height: 6,
-          borderRadius: 3,
-          backgroundColor: BLUE_ACCENT,
-          marginTop: 3,
-          marginRight: 8,
-        },
-        highlightText: {
-          fontSize: 8,
-          color: TEXT_BODY,
-          lineHeight: 1.5,
-          flex: 1,
-        },
-
-        // ── Spec row ──
-        specRow: {
-          flexDirection: 'row' as const,
-          justifyContent: 'space-between' as const,
-          paddingVertical: 6,
-          borderBottomWidth: 0.5,
-          borderBottomColor: '#e5e7eb',
-        },
-        specLabel: {
-          fontSize: 8,
-          color: TEXT_MUTED,
-        },
-        specValue: {
-          fontSize: 8,
-          fontFamily: 'Helvetica-Bold',
-          color: TEXT_DARK,
-        },
-
-        // ── Financial metric card ──
-        finMetricCard: {
-          backgroundColor: CARD_BG,
-          borderRadius: 8,
-          borderWidth: 1,
-          borderColor: CARD_BORDER,
-          padding: 12,
-          alignItems: 'center' as const,
-          justifyContent: 'center' as const,
-          flex: 1,
-        },
-      });
-
-      // ─── Reusable PDF sub-components ────────────────────────────────
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const HeaderBar = ({ firmName, propName }: { firmName: string; propName: string }) => (
-        <View style={s.headerBar}>
-          <Text style={s.headerBarText}>{firmName}</Text>
-          <Text style={s.headerBarText}>{propName}</Text>
-        </View>
-      );
-
-      const SectionTitle = ({ title }: { title: string }) => (
-        <View>
-          <Text style={s.sectionHeader}>{title}</Text>
-          <View style={s.sectionHeaderUnderline} />
-        </View>
-      );
-
-      const PageFooter = ({ pageNum }: { pageNum: number }) => (
-        <View style={s.pageFooter} fixed>
-          <Text style={s.pageFooterText}>{firmConfig.displayName}</Text>
-          <Text style={s.pageFooterText}>CONFIDENTIAL</Text>
-          <Text style={s.pageFooterText}>{pageNum}</Text>
-        </View>
-      );
-
-      // Metric cell for snapshot grids
-      const MetricCell = ({ value, label, width }: { value: string; label: string; width?: number | string }) => (
-        <View style={{ width: width || '25%', marginBottom: 14 }}>
-          <Text style={s.metricValue}>{value}</Text>
-          <Text style={s.metricLabel}>{label}</Text>
-        </View>
-      );
-
-      // Photo or placeholder
-      const PhotoOrPlaceholder = ({ index, photoB64, width, height }: { index: number; photoB64?: string; width: number | string; height: number }) => {
-        if (photoB64) {
-          return (
-            <View style={{ width, height, borderRadius: 6, overflow: 'hidden' as const }}>
-              <Image src={photoB64} style={{ width: '100%', height: '100%', objectFit: 'cover' as const }} />
-            </View>
-          );
-        }
-        return (
-          <View style={[s.placeholderBox, { width, height }]}>
-            <Text style={s.placeholderText}>Property Photo {index + 1}</Text>
-          </View>
-        );
-      };
-
-      // ─── Build highlights from deal or fallback ─────────────────────
-      const highlights = deal.highlights && deal.highlights.length > 0
-        ? deal.highlights
-        : [
-          `${occupancy}% leased ${assetClass.toLowerCase()} investment`,
-          `${firmConfig.sfSymbol}${fmtNum(totalSf)} SF on ${firmConfig.sfSymbol}${landAcres} acres in ${submarket}`,
-          `${waltYears} Year WALT with scheduled rent growth`,
-          `Functional ${propertyType.toLowerCase()} building with ${clearHeight}, ${dockDoors} dock-high doors`,
-          `Strategic location with access to major distribution corridors`,
-          `Below market rents with near-term mark-to-market upside`,
-        ];
-
-      // ─── Build the PDF Document ─────────────────────────────────────
-
-      const OMDocument = (
-        <Document>
-          {/* ══════════════════════════════════════════════════════════════
-              PAGE 1 — COVER
-              ══════════════════════════════════════════════════════════════ */}
-          <Page size="A4" orientation="landscape" style={s.coverPage}>
-            <View style={{ flex: 1, justifyContent: 'center' as const, alignItems: 'center' as const }}>
-              {/* Firm tagline */}
-              <Text style={s.coverFirmLine}>
-                {`A ${firmConfig.displayName.toUpperCase()} ${firmConfig.group.toUpperCase()} INVESTMENT OPPORTUNITY`}
-              </Text>
-
-              {/* Property name */}
-              <Text style={s.coverPropertyName}>{propertyName}</Text>
-
-              {/* Address */}
-              <Text style={s.coverAddress}>{address}</Text>
-
-              {/* Coverline metrics */}
-              <Text style={s.coverMetricsLine}>
-                {`STABLE IN-PLACE CASH FLOW  |  ${occupancy}% LEASED  |  ${firmConfig.sfSymbol}${fmtNum(totalSf)} SF  |  ${firmConfig.sfSymbol}${landAcres} ACRES  |  ${waltYears} YEAR WALT`}
-              </Text>
-
-              {/* Blue accent divider */}
-              <View style={s.coverDivider} />
-
-              {/* Confidential label */}
-              <Text style={s.coverConfidential}>CONFIDENTIAL OFFERING MEMORANDUM</Text>
-            </View>
-          </Page>
-
-          {/* ══════════════════════════════════════════════════════════════
-              PAGE 2 — EXECUTIVE SUMMARY
-              ══════════════════════════════════════════════════════════════ */}
-          <Page size="A4" orientation="landscape" style={s.landscapePage}>
-            <HeaderBar firmName={firmConfig.displayName} propName={propertyName} />
-            <View style={s.pageBody}>
-              <SectionTitle title="Executive Summary" />
-
-              <View style={[s.row, { gap: 20 }]}>
-                {/* Left column — 55% text */}
-                <View style={{ width: '53%' }}>
-                  <Text style={[s.bodyText, { marginBottom: 16 }]}>
-                    {execSummaryText}
-                  </Text>
-
-                  {/* Investment Highlights */}
-                  <Text style={{ fontSize: 11, fontFamily: 'Helvetica-Bold', color: NAVY_HEADER, marginBottom: 10 }}>
-                    Investment Highlights
-                  </Text>
-                  <View style={{ flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: 8 }}>
-                    {highlights.slice(0, 6).map((h, i) => (
-                      <View key={i} style={[s.highlightCard, { width: '48%' }]}>
-                        <View style={s.highlightDot} />
-                        <Text style={s.highlightText}>{h}</Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-
-                {/* Right column — 45% Investment Snapshot */}
-                <View style={{ width: '45%' }}>
-                  <View style={s.calloutCard}>
-                    <Text style={s.calloutCardTitle}>Investment Snapshot</Text>
-                    <View style={{ flexDirection: 'row' as const, flexWrap: 'wrap' as const }}>
-                      <MetricCell value={`${firmConfig.sfSymbol}${fmtNum(totalSf)}`} label="Total SF" />
-                      <MetricCell value={`${firmConfig.sfSymbol}${landAcres} AC`} label="Land Area" />
-                      <MetricCell value={String(yearBuilt)} label="Year Built" />
-                      <MetricCell value={`${occupancy}%`} label="Occupancy" />
-                      <MetricCell value={`${waltYears} YR`} label="WALT" />
-                      <MetricCell value={clearHeight} label="Clear Height" />
-                      <MetricCell value={String(dockDoors)} label="Dock Doors" />
-                      <MetricCell value={String(gradeDoors)} label="Grade Doors" />
-                    </View>
-                  </View>
-                </View>
-              </View>
-            </View>
-            <PageFooter pageNum={2} />
-          </Page>
-
-          {/* ══════════════════════════════════════════════════════════════
-              PAGE 3 — PROPERTY PHOTOS
-              ══════════════════════════════════════════════════════════════ */}
-          <Page size="A4" orientation="landscape" style={s.landscapePage}>
-            <HeaderBar firmName={firmConfig.displayName} propName={propertyName} />
-            <View style={s.pageBody}>
-              <SectionTitle title="Property Overview" />
-
-              {/* 2x2 photo grid */}
-              <View style={{ flexDirection: 'row' as const, gap: 12, marginBottom: 12 }}>
-                <PhotoOrPlaceholder index={0} photoB64={photoB64Array[0]} width="49%" height={210} />
-                <PhotoOrPlaceholder index={1} photoB64={photoB64Array[1]} width="49%" height={210} />
-              </View>
-              <View style={{ flexDirection: 'row' as const, gap: 12 }}>
-                <PhotoOrPlaceholder index={2} photoB64={photoB64Array[2]} width="49%" height={210} />
-                <PhotoOrPlaceholder index={3} photoB64={photoB64Array[3]} width="49%" height={210} />
-              </View>
-
-              {/* Captions */}
-              <View style={{ flexDirection: 'row' as const, gap: 12, marginTop: 6 }}>
-                {[1, 2, 3, 4].map((n) => (
-                  <View key={n} style={{ width: '24%' }}>
-                    <Text style={{ fontSize: 7, color: TEXT_MUTED, textAlign: 'center' as const }}>
-                      {photoB64Array[n - 1] ? `Photo ${n}` : `Photo ${n} — Placeholder`}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-            <PageFooter pageNum={3} />
-          </Page>
-
-          {/* ══════════════════════════════════════════════════════════════
-              PAGE 4 — AERIAL / LOCATION
-              ══════════════════════════════════════════════════════════════ */}
-          <Page size="A4" orientation="landscape" style={s.landscapePage}>
-            <HeaderBar firmName={firmConfig.displayName} propName={propertyName} />
-            <View style={s.pageBody}>
-              <SectionTitle title="Location Overview" />
-
-              {/* Aerial placeholder */}
-              <View style={[s.placeholderBox, { width: '100%', height: 300, marginBottom: 16 }]}>
-                <Text style={[s.placeholderText, { fontSize: 14 }]}>Aerial View — Map Placeholder</Text>
-              </View>
-
-              {/* Three callout cards */}
-              <View style={{ flexDirection: 'row' as const, gap: 12 }}>
-                {/* Regional Access */}
-                <View style={[s.calloutCard, { flex: 1 }]}>
-                  <Text style={[s.calloutCardTitle, { fontSize: 10 }]}>Regional Access</Text>
-                  <Text style={{ fontSize: 8, color: TEXT_BODY, lineHeight: 1.6 }}>
-                    {`\u2022  Interstate 15 — 2 miles\n\u2022  Interstate 215 — 8 miles\n\u2022  Ports of LA/Long Beach — 85 miles\n\u2022  Ontario International Airport — 45 miles`}
-                  </Text>
-                </View>
-
-                {/* Nearby Tenants */}
-                <View style={[s.calloutCard, { flex: 1 }]}>
-                  <Text style={[s.calloutCardTitle, { fontSize: 10 }]}>Nearby Tenants</Text>
-                  <Text style={{ fontSize: 8, color: TEXT_BODY, lineHeight: 1.6 }}>
-                    {`\u2022  Amazon Fulfillment Center\n\u2022  FedEx Ground Hub\n\u2022  Walmart Distribution\n\u2022  Home Depot Supply Chain`}
-                  </Text>
-                </View>
-
-                {/* Transportation */}
-                <View style={[s.calloutCard, { flex: 1 }]}>
-                  <Text style={[s.calloutCardTitle, { fontSize: 10 }]}>Transportation</Text>
-                  <Text style={{ fontSize: 8, color: TEXT_BODY, lineHeight: 1.6 }}>
-                    {`\u2022  Major freight corridors\n\u2022  BNSF Railway access\n\u2022  Intermodal facilities nearby\n\u2022  Growing labor pool within 30 min`}
-                  </Text>
-                </View>
-              </View>
-            </View>
-            <PageFooter pageNum={4} />
-          </Page>
-
-          {/* ══════════════════════════════════════════════════════════════
-              PAGE 5 — PROPERTY DESCRIPTION
-              ══════════════════════════════════════════════════════════════ */}
-          <Page size="A4" orientation="landscape" style={s.landscapePage}>
-            <HeaderBar firmName={firmConfig.displayName} propName={propertyName} />
-            <View style={s.pageBody}>
-              <SectionTitle title="Property Description" />
-
-              <View style={[s.row, { gap: 20 }]}>
-                {/* Left 60% — text */}
-                <View style={{ width: '58%' }}>
-                  <Text style={s.bodyText}>
-                    {propertyDescText}
-                  </Text>
-                </View>
-
-                {/* Right 40% — Building Specifications card */}
-                <View style={{ width: '40%' }}>
-                  <View style={s.calloutCard}>
-                    <Text style={s.calloutCardTitle}>Building Specifications</Text>
-
-                    <View style={s.specRow}>
-                      <Text style={s.specLabel}>Clear Height</Text>
-                      <Text style={s.specValue}>{clearHeight}</Text>
-                    </View>
-                    <View style={s.specRow}>
-                      <Text style={s.specLabel}>Dock Doors</Text>
-                      <Text style={s.specValue}>{dockDoors}</Text>
-                    </View>
-                    <View style={s.specRow}>
-                      <Text style={s.specLabel}>Grade-Level Doors</Text>
-                      <Text style={s.specValue}>{gradeDoors}</Text>
-                    </View>
-                    <View style={s.specRow}>
-                      <Text style={s.specLabel}>Parking</Text>
-                      <Text style={s.specValue}>{`${parking} spaces`}</Text>
-                    </View>
-                    <View style={s.specRow}>
-                      <Text style={s.specLabel}>Power</Text>
-                      <Text style={s.specValue}>3-Phase, 4,000A</Text>
-                    </View>
-                    <View style={s.specRow}>
-                      <Text style={s.specLabel}>Sprinklers</Text>
-                      <Text style={s.specValue}>ESFR</Text>
-                    </View>
-                    <View style={s.specRow}>
-                      <Text style={s.specLabel}>Zoning</Text>
-                      <Text style={s.specValue}>{zoning}</Text>
-                    </View>
-                    <View style={s.specRow}>
-                      <Text style={s.specLabel}>Year Built</Text>
-                      <Text style={s.specValue}>{yearBuilt}</Text>
-                    </View>
-                    <View style={[s.specRow, { borderBottomWidth: 0 }]}>
-                      <Text style={s.specLabel}>Buildings</Text>
-                      <Text style={s.specValue}>{numBuildings}</Text>
-                    </View>
-                  </View>
-                </View>
-              </View>
-            </View>
-            <PageFooter pageNum={5} />
-          </Page>
-
-          {/* ══════════════════════════════════════════════════════════════
-              PAGE 6 — TENANT OVERVIEW
-              ══════════════════════════════════════════════════════════════ */}
-          <Page size="A4" orientation="landscape" style={s.landscapePage}>
-            <HeaderBar firmName={firmConfig.displayName} propName={propertyName} />
-            <View style={s.pageBody}>
-              <SectionTitle title="Tenant & Lease Summary" />
-
-              {/* Tenant summary card */}
-              <View style={[s.calloutCard, { marginBottom: 20, flexDirection: 'row' as const, justifyContent: 'space-around' as const }]}>
-                <View style={{ alignItems: 'center' as const }}>
-                  <Text style={[s.metricValue, { fontSize: 16 }]}>
-                    {numTenants === 1 ? 'Single Tenant' : `${numTenants} Tenants`}
-                  </Text>
-                  <Text style={s.metricLabel}>Tenant Profile</Text>
-                </View>
-                <View style={{ alignItems: 'center' as const }}>
-                  <Text style={[s.metricValue, { fontSize: 16 }]}>NNN</Text>
-                  <Text style={s.metricLabel}>Lease Type</Text>
-                </View>
-                <View style={{ alignItems: 'center' as const }}>
-                  <Text style={[s.metricValue, { fontSize: 16 }]}>{`${waltYears} Years`}</Text>
-                  <Text style={s.metricLabel}>WALT</Text>
-                </View>
-                <View style={{ alignItems: 'center' as const }}>
-                  <Text style={[s.metricValue, { fontSize: 16 }]}>{fmtDollar(noi)}</Text>
-                  <Text style={s.metricLabel}>Annual Rent (NOI)</Text>
-                </View>
-              </View>
-
-              {/* Tenant description */}
-              <Text style={[s.bodyText, { marginBottom: 16 }]}>
-                {tenantOverviewText}
-              </Text>
-
-              {/* Rent Roll Table */}
-              <Text style={{ fontSize: 11, fontFamily: 'Helvetica-Bold', color: NAVY_HEADER, marginBottom: 8 }}>
-                Rent Roll
-              </Text>
-
-              {/* Table Header */}
-              <View style={s.tableHeaderRow}>
-                <Text style={[s.tableHeaderCell, { width: '8%' }]}>Suite</Text>
-                <Text style={[s.tableHeaderCell, { width: '20%' }]}>Tenant</Text>
-                <Text style={[s.tableHeaderCell, { width: '12%', textAlign: 'right' as const }]}>SF</Text>
-                <Text style={[s.tableHeaderCell, { width: '10%', textAlign: 'right' as const }]}>% of NRA</Text>
-                <Text style={[s.tableHeaderCell, { width: '13%', textAlign: 'center' as const }]}>Lease Start</Text>
-                <Text style={[s.tableHeaderCell, { width: '13%', textAlign: 'center' as const }]}>Lease End</Text>
-                <Text style={[s.tableHeaderCell, { width: '12%', textAlign: 'right' as const }]}>Mo. Rent</Text>
-                <Text style={[s.tableHeaderCell, { width: '12%', textAlign: 'right' as const }]}>Ann. PSF</Text>
-              </View>
-
-              {/* Table Rows (placeholder data) */}
-              {[
-                { suite: '100', tenant: 'Primary Tenant', sf: totalSf, pctNra: '100.0%', start: '01/2020', end: '06/2029', moRent: fmtDollar(Math.round(noi / 12)), annPsf: fmtDollarDec(noi / totalSf) },
-              ].map((row, i) => (
-                <View key={i} style={i % 2 === 0 ? s.tableRow : s.tableRowAlt}>
-                  <Text style={[s.tableCell, { width: '8%' }]}>{row.suite}</Text>
-                  <Text style={[s.tableCell, { width: '20%' }]}>{row.tenant}</Text>
-                  <Text style={[s.tableCell, { width: '12%', textAlign: 'right' as const }]}>{fmtNum(row.sf)}</Text>
-                  <Text style={[s.tableCell, { width: '10%', textAlign: 'right' as const }]}>{row.pctNra}</Text>
-                  <Text style={[s.tableCell, { width: '13%', textAlign: 'center' as const }]}>{row.start}</Text>
-                  <Text style={[s.tableCell, { width: '13%', textAlign: 'center' as const }]}>{row.end}</Text>
-                  <Text style={[s.tableCell, { width: '12%', textAlign: 'right' as const }]}>{row.moRent}</Text>
-                  <Text style={[s.tableCell, { width: '12%', textAlign: 'right' as const }]}>{row.annPsf}</Text>
-                </View>
-              ))}
-
-              {/* Totals row */}
-              <View style={[s.tableRow, { backgroundColor: '#eef2ff', borderTopWidth: 1, borderTopColor: BLUE_ACCENT }]}>
-                <Text style={[s.tableCell, { width: '8%', fontFamily: 'Helvetica-Bold' }]}></Text>
-                <Text style={[s.tableCell, { width: '20%', fontFamily: 'Helvetica-Bold' }]}>TOTAL</Text>
-                <Text style={[s.tableCell, { width: '12%', textAlign: 'right' as const, fontFamily: 'Helvetica-Bold' }]}>{fmtNum(totalSf)}</Text>
-                <Text style={[s.tableCell, { width: '10%', textAlign: 'right' as const, fontFamily: 'Helvetica-Bold' }]}>100.0%</Text>
-                <Text style={[s.tableCell, { width: '13%' }]}></Text>
-                <Text style={[s.tableCell, { width: '13%' }]}></Text>
-                <Text style={[s.tableCell, { width: '12%', textAlign: 'right' as const, fontFamily: 'Helvetica-Bold' }]}>{fmtDollar(Math.round(noi / 12))}</Text>
-                <Text style={[s.tableCell, { width: '12%', textAlign: 'right' as const, fontFamily: 'Helvetica-Bold' }]}>{fmtDollarDec(noi / totalSf)}</Text>
-              </View>
-            </View>
-            <PageFooter pageNum={6} />
-          </Page>
-
-          {/* ══════════════════════════════════════════════════════════════
-              PAGE 7 — FINANCIAL SUMMARY / CASH FLOW
-              ══════════════════════════════════════════════════════════════ */}
-          <Page size="A4" orientation="landscape" style={s.landscapePage}>
-            <HeaderBar firmName={firmConfig.displayName} propName={propertyName} />
-            <View style={s.pageBody}>
-              <SectionTitle title="Financial Analysis" />
-
-              <View style={[s.row, { gap: 20 }]}>
-                {/* Left — Pro Forma Table */}
-                <View style={{ width: '58%' }}>
-                  <Text style={{ fontSize: 11, fontFamily: 'Helvetica-Bold', color: NAVY_HEADER, marginBottom: 8 }}>
-                    Income & Expense Pro Forma
-                  </Text>
-
-                  {/* Pro forma header */}
-                  <View style={s.tableHeaderRow}>
-                    <Text style={[s.tableHeaderCell, { width: '40%' }]}></Text>
-                    <Text style={[s.tableHeaderCell, { width: '20%', textAlign: 'right' as const }]}>Year 1</Text>
-                    <Text style={[s.tableHeaderCell, { width: '20%', textAlign: 'right' as const }]}>Year 2</Text>
-                    <Text style={[s.tableHeaderCell, { width: '20%', textAlign: 'right' as const }]}>Year 3</Text>
-                  </View>
-
-                  {/* Pro forma rows */}
-                  {(() => {
-                    const yr1Gpr = noi * 1.15;
-                    const yr1Vacancy = yr1Gpr * 0.03;
-                    const yr1Egi = yr1Gpr - yr1Vacancy;
-                    const yr1Taxes = noi * 0.06;
-                    const yr1Insurance = noi * 0.02;
-                    const yr1Cam = noi * 0.04;
-                    const yr1Mgmt = noi * 0.03;
-                    const yr1TotalExp = yr1Taxes + yr1Insurance + yr1Cam + yr1Mgmt;
-                    const yr1Noi = yr1Egi - yr1TotalExp;
-                    const growth = 1.03;
-
-                    const proFormaRows = [
-                      { label: 'Gross Potential Rent', y1: yr1Gpr, y2: yr1Gpr * growth, y3: yr1Gpr * growth * growth, bold: false },
-                      { label: '  Less: Vacancy (3%)', y1: -yr1Vacancy, y2: -yr1Vacancy * growth, y3: -yr1Vacancy * growth * growth, bold: false },
-                      { label: 'Effective Gross Income', y1: yr1Egi, y2: yr1Egi * growth, y3: yr1Egi * growth * growth, bold: true },
-                      { label: '', y1: 0, y2: 0, y3: 0, bold: false, spacer: true },
-                      { label: '  Real Estate Taxes', y1: yr1Taxes, y2: yr1Taxes * growth, y3: yr1Taxes * growth * growth, bold: false },
-                      { label: '  Insurance', y1: yr1Insurance, y2: yr1Insurance * growth, y3: yr1Insurance * growth * growth, bold: false },
-                      { label: '  CAM / Repairs', y1: yr1Cam, y2: yr1Cam * growth, y3: yr1Cam * growth * growth, bold: false },
-                      { label: '  Management (3%)', y1: yr1Mgmt, y2: yr1Mgmt * growth, y3: yr1Mgmt * growth * growth, bold: false },
-                      { label: 'Total Operating Expenses', y1: yr1TotalExp, y2: yr1TotalExp * growth, y3: yr1TotalExp * growth * growth, bold: true },
-                      { label: '', y1: 0, y2: 0, y3: 0, bold: false, spacer: true },
-                      { label: 'Net Operating Income', y1: yr1Noi, y2: yr1Noi * growth, y3: yr1Noi * growth * growth, bold: true },
-                    ];
-
-                    return proFormaRows.map((r, i) => {
-                      if (r.spacer) {
-                        return <View key={i} style={{ height: 6 }} />;
-                      }
-                      return (
-                        <View key={i} style={i % 2 === 0 ? s.tableRow : s.tableRowAlt}>
-                          <Text style={[s.tableCell, { width: '40%', fontFamily: r.bold ? 'Helvetica-Bold' : 'Helvetica' }]}>{r.label}</Text>
-                          <Text style={[s.tableCell, { width: '20%', textAlign: 'right' as const, fontFamily: r.bold ? 'Helvetica-Bold' : 'Helvetica' }]}>{fmtDollar(Math.round(r.y1))}</Text>
-                          <Text style={[s.tableCell, { width: '20%', textAlign: 'right' as const, fontFamily: r.bold ? 'Helvetica-Bold' : 'Helvetica' }]}>{fmtDollar(Math.round(r.y2))}</Text>
-                          <Text style={[s.tableCell, { width: '20%', textAlign: 'right' as const, fontFamily: r.bold ? 'Helvetica-Bold' : 'Helvetica' }]}>{fmtDollar(Math.round(r.y3))}</Text>
-                        </View>
-                      );
-                    });
-                  })()}
-                </View>
-
-                {/* Right — Key Financial Metrics */}
-                <View style={{ width: '38%' }}>
-                  <Text style={{ fontSize: 11, fontFamily: 'Helvetica-Bold', color: NAVY_HEADER, marginBottom: 8 }}>
-                    Key Financial Metrics
-                  </Text>
-
-                  <View style={{ gap: 10 }}>
-                    <View style={s.finMetricCard}>
-                      <Text style={[s.metricValue, { color: BLUE_ACCENT }]}>{fmtDollar(askingPrice)}</Text>
-                      <Text style={s.metricLabel}>Asking Price</Text>
-                    </View>
-                    <View style={s.finMetricCard}>
-                      <Text style={[s.metricValue, { color: BLUE_ACCENT }]}>{fmtPct(capRate)}</Text>
-                      <Text style={s.metricLabel}>Cap Rate</Text>
-                    </View>
-                    <View style={{ flexDirection: 'row' as const, gap: 10 }}>
-                      <View style={s.finMetricCard}>
-                        <Text style={[s.metricValue, { fontSize: 16, color: BLUE_ACCENT }]}>{fmtDollarDec(pricePerSf)}</Text>
-                        <Text style={s.metricLabel}>Price / SF</Text>
-                      </View>
-                      <View style={s.finMetricCard}>
-                        <Text style={[s.metricValue, { fontSize: 16, color: BLUE_ACCENT }]}>{fmtDollar(Math.round(noi))}</Text>
-                        <Text style={s.metricLabel}>NOI</Text>
-                      </View>
-                    </View>
-                  </View>
-                </View>
-              </View>
-            </View>
-            <PageFooter pageNum={7} />
-          </Page>
-
-          {/* ══════════════════════════════════════════════════════════════
-              PAGE 8 — MARKET OVERVIEW
-              ══════════════════════════════════════════════════════════════ */}
-          <Page size="A4" orientation="landscape" style={s.landscapePage}>
-            <HeaderBar firmName={firmConfig.displayName} propName={propertyName} />
-            <View style={s.pageBody}>
-              <SectionTitle title="Market Overview" />
-
-              <View style={[s.row, { gap: 20 }]}>
-                {/* Left 55% — market text */}
-                <View style={{ width: '53%' }}>
-                  <Text style={s.bodyText}>
-                    {marketOverviewText}
-                  </Text>
-                </View>
-
-                {/* Right 45% — Market Snapshot card */}
-                <View style={{ width: '45%' }}>
-                  <View style={s.calloutCard}>
-                    <Text style={s.calloutCardTitle}>Market Snapshot</Text>
-
-                    <View style={s.specRow}>
-                      <Text style={s.specLabel}>Submarket</Text>
-                      <Text style={s.specValue}>{submarket}</Text>
-                    </View>
-                    <View style={s.specRow}>
-                      <Text style={s.specLabel}>Submarket Vacancy</Text>
-                      <Text style={s.specValue}>3.2%</Text>
-                    </View>
-                    <View style={s.specRow}>
-                      <Text style={s.specLabel}>Avg Asking Rent</Text>
-                      <Text style={s.specValue}>$1.15 NNN</Text>
-                    </View>
-                    <View style={s.specRow}>
-                      <Text style={s.specLabel}>Net Absorption (YTD)</Text>
-                      <Text style={s.specValue}>2.8 MSF</Text>
-                    </View>
-                    <View style={s.specRow}>
-                      <Text style={s.specLabel}>Under Construction</Text>
-                      <Text style={s.specValue}>1.4 MSF</Text>
-                    </View>
-                    <View style={s.specRow}>
-                      <Text style={s.specLabel}>County</Text>
-                      <Text style={s.specValue}>{county}</Text>
-                    </View>
-                    <View style={[s.specRow, { borderBottomWidth: 0 }]}>
-                      <Text style={s.specLabel}>5-Yr Avg Rent Growth</Text>
-                      <Text style={s.specValue}>4.8%</Text>
-                    </View>
-                  </View>
-                </View>
-              </View>
-            </View>
-            <PageFooter pageNum={8} />
-          </Page>
-
-          {/* ══════════════════════════════════════════════════════════════
-              PAGE 9 — DISCLAIMER
-              ══════════════════════════════════════════════════════════════ */}
-          <Page size="A4" orientation="landscape" style={s.landscapePage}>
-            <HeaderBar firmName={firmConfig.displayName} propName={propertyName} />
-            <View style={[s.pageBody, { justifyContent: 'center' as const }]}>
-              <Text style={{ fontSize: 16, fontFamily: 'Helvetica-Bold', color: NAVY_HEADER, marginBottom: 6 }}>
-                Confidentiality & Disclaimer
-              </Text>
-              <View style={{ width: 50, height: 3, backgroundColor: BLUE_ACCENT, marginBottom: 24 }} />
-
-              <Text style={{ fontSize: 9, lineHeight: 1.9, color: TEXT_MUTED, textAlign: 'justify' as const, marginBottom: 40 }}>
-                {firmConfig.disclaimer}
-              </Text>
-
-              <View style={{ alignItems: 'center' as const, marginTop: 20 }}>
-                <Text style={{ fontSize: 11, fontFamily: 'Helvetica-Bold', color: TEXT_BODY, marginBottom: 4 }}>
-                  {firmConfig.fullName}
-                </Text>
-                <Text style={{ fontSize: 9, color: TEXT_MUTED, marginBottom: 4 }}>
-                  {firmConfig.group}
-                </Text>
-                <Text style={{ fontSize: 8, color: TEXT_LIGHT_MUTED }}>
-                  {new Date().getFullYear()}
-                </Text>
-              </View>
-            </View>
-            <PageFooter pageNum={9} />
-          </Page>
-        </Document>
-      );
-
-      // Generate blob and download
-      const blob = await pdf(OMDocument).toBlob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${propertyName.replace(/\s+/g, '_')}_OM_${firmConfig.displayName}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error('Error exporting PDF:', err);
-      alert('Failed to export PDF. Please try again.');
-    } finally {
-      setExportingPdf(false);
-    }
-  }
-
-  // ─── Loading State ────────────────────────────────────────────────────────────
+  // ─── Build OM data ─────────────────────────────────────────────────────────
+
+  const omData: CushmanOMData = {
+    deal: deal || {},
+    sections,
+    selectedPhotos,
+    firmStyle: selectedFirmStyle,
+  };
+
+  // ─── Loading state ─────────────────────────────────────────────────────────
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
+        <p style={{ color: '#666', fontSize: 18 }}>Loading deal...</p>
       </div>
     );
   }
 
-  if (!deal) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <p className="text-gray-500">Deal not found.</p>
-      </div>
-    );
-  }
+  // ─── Render ─────────────────────────────────────────────────────────────────
 
-  const firmConfig = FIRM_STYLES[selectedFirmStyle];
-  const hasSections = sections.length > 0;
-
-  // ─── Empty State ──────────────────────────────────────────────────────────────
-
-  if (!hasSections && !generating) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {/* Back Link */}
+  return (
+    <div style={{ minHeight: '100vh', background: '#f3f4f6' }}>
+      {/* ── Toolbar ── */}
+      <div
+        style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 50,
+          background: '#fff',
+          borderBottom: '1px solid #e5e7eb',
+          padding: '12px 24px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <Link
             href={`/deals/${id}`}
-            className="text-sm text-gray-500 hover:text-gray-700 mb-6 inline-block"
+            style={{ color: '#6b7280', textDecoration: 'none', fontSize: 14 }}
           >
             &larr; Back to Deal
           </Link>
+          <h1 style={{ fontSize: 18, fontWeight: 600, margin: 0, color: '#111827' }}>
+            Offering Memorandum
+          </h1>
+        </div>
 
-          {/* Empty State Card */}
-          <div className="bg-white rounded-xl p-12 text-center mt-8">
-            {/* Illustration Placeholder */}
-            <div className="mx-auto w-24 h-24 rounded-full bg-blue-50 flex items-center justify-center mb-6">
-              <svg
-                className="w-12 h-12 text-blue-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.5}
-                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                />
-              </svg>
-            </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <select
+            value={selectedFirmStyle}
+            onChange={(e) => setSelectedFirmStyle(e.target.value as FirmStyleKey)}
+            style={{
+              padding: '6px 12px',
+              border: '1px solid #d1d5db',
+              borderRadius: 6,
+              fontSize: 14,
+              background: '#fff',
+            }}
+          >
+            {FIRM_OPTIONS.map((f) => (
+              <option key={f.key} value={f.key}>
+                {f.label}
+              </option>
+            ))}
+          </select>
 
-            <h2
-              className="text-2xl font-bold text-gray-900 mb-2"
-              style={{ fontFamily: "'DM Serif Display', serif" }}
-            >
-              Generate your first OM
-            </h2>
-            <p className="text-gray-500 mb-8 max-w-md mx-auto">
-              Create a professional Offering Memorandum for{' '}
-              <span className="font-medium text-gray-700">
-                {deal.property_name}
-              </span>{' '}
-              using AI-powered content generation with firm-specific styling.
-            </p>
+          <button
+            onClick={() => setShowPhotoPicker(true)}
+            style={{
+              padding: '6px 16px',
+              border: '1px solid #d1d5db',
+              borderRadius: 6,
+              fontSize: 14,
+              background: '#fff',
+              cursor: 'pointer',
+            }}
+          >
+            Photos ({selectedPhotos.length})
+          </button>
 
-            {/* Firm Style Selector */}
-            <div className="max-w-xs mx-auto mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2 text-left">
-                Firm Style
-              </label>
-              <select
-                value={selectedFirmStyle}
-                onChange={(e) =>
-                  setSelectedFirmStyle(e.target.value as FirmStyleKey)
-                }
-                className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-              >
-                {FIRM_OPTIONS.map((opt) => (
-                  <option key={opt.key} value={opt.key}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <button
+            onClick={generateOMSections}
+            disabled={generating}
+            style={{
+              padding: '6px 16px',
+              border: 'none',
+              borderRadius: 6,
+              fontSize: 14,
+              background: generating ? '#9ca3af' : '#2563eb',
+              color: '#fff',
+              cursor: generating ? 'not-allowed' : 'pointer',
+              fontWeight: 500,
+            }}
+          >
+            {generating ? 'Generating...' : sections.length > 0 ? 'Regenerate All' : 'Generate OM'}
+          </button>
 
-            {/* Generate CTA */}
+          {sections.length > 0 && (
             <button
-              onClick={generateOMSections}
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-3 text-sm font-semibold text-white hover:bg-blue-700 transition-colors"
+              onClick={handleExportPdf}
+              style={{
+                padding: '6px 16px',
+                border: '1px solid #d1d5db',
+                borderRadius: 6,
+                fontSize: 14,
+                background: '#fff',
+                cursor: 'pointer',
+                fontWeight: 500,
+              }}
             >
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M13 10V3L4 14h7v7l9-11h-7z"
-                />
-              </svg>
-              Generate OM
+              Export PDF
             </button>
-          </div>
+          )}
         </div>
       </div>
-    );
-  }
 
-  // ─── Main Editor Layout ───────────────────────────────────────────────────────
-
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Back Link */}
-        <Link
-          href={`/deals/${id}`}
-          className="text-sm text-gray-500 hover:text-gray-700 mb-6 inline-block"
-        >
-          &larr; Back to Deal
-        </Link>
-
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8 mt-2">
-          <div>
-            <h1
-              className="text-3xl font-bold text-gray-900"
-              style={{ fontFamily: "'DM Serif Display', serif" }}
+      {/* ── Generating progress ── */}
+      {generating && (
+        <div style={{ padding: '24px 24px 0', maxWidth: 600, margin: '0 auto' }}>
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: 8,
+              padding: 24,
+              boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+              textAlign: 'center',
+            }}
+          >
+            <p style={{ margin: '0 0 12px', fontWeight: 500 }}>
+              Generating your Offering Memorandum...
+            </p>
+            <div
+              style={{
+                background: '#e5e7eb',
+                borderRadius: 999,
+                height: 8,
+                overflow: 'hidden',
+              }}
             >
-              Offering Memorandum
-            </h1>
-            <p className="text-gray-500 mt-1">{deal.property_name}</p>
+              <div
+                style={{
+                  background: '#2563eb',
+                  height: '100%',
+                  width: `${generateProgress}%`,
+                  borderRadius: 999,
+                  transition: 'width 0.3s ease',
+                }}
+              />
+            </div>
+            <p style={{ margin: '8px 0 0', fontSize: 13, color: '#6b7280' }}>
+              {Math.round(generateProgress)}%
+            </p>
           </div>
+        </div>
+      )}
 
-          <div className="flex items-center gap-3 flex-wrap">
-            {/* Firm Style Dropdown */}
+      {/* ── Empty state ── */}
+      {!generating && sections.length === 0 && (
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            minHeight: 'calc(100vh - 60px)',
+          }}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: 12,
+              padding: '48px 40px',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+              textAlign: 'center',
+              maxWidth: 420,
+              width: '100%',
+            }}
+          >
+            <h2 style={{ fontSize: 20, fontWeight: 600, margin: '0 0 8px', color: '#111827' }}>
+              Generate your first OM
+            </h2>
+            <p style={{ color: '#6b7280', fontSize: 14, margin: '0 0 24px' }}>
+              Select a firm style and generate AI-powered content for your Offering Memorandum.
+            </p>
+
             <select
               value={selectedFirmStyle}
-              onChange={(e) =>
-                setSelectedFirmStyle(e.target.value as FirmStyleKey)
-              }
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none bg-white"
+              onChange={(e) => setSelectedFirmStyle(e.target.value as FirmStyleKey)}
+              style={{
+                padding: '8px 12px',
+                border: '1px solid #d1d5db',
+                borderRadius: 6,
+                fontSize: 14,
+                width: '100%',
+                marginBottom: 16,
+                background: '#fff',
+              }}
             >
-              {FIRM_OPTIONS.map((opt) => (
-                <option key={opt.key} value={opt.key}>
-                  {opt.label}
+              {FIRM_OPTIONS.map((f) => (
+                <option key={f.key} value={f.key}>
+                  {f.label}
                 </option>
               ))}
             </select>
 
-            {/* Regenerate All */}
             <button
               onClick={generateOMSections}
-              disabled={generating}
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              style={{
+                padding: '10px 24px',
+                border: 'none',
+                borderRadius: 6,
+                fontSize: 15,
+                background: '#2563eb',
+                color: '#fff',
+                cursor: 'pointer',
+                fontWeight: 600,
+                width: '100%',
+              }}
             >
-              {generating ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                    />
-                  </svg>
-                  Regenerate All
-                </>
-              )}
-            </button>
-
-            {/* Export PDF */}
-            <button
-              onClick={handleExportPdf}
-              disabled={exportingPdf || sections.length === 0}
-              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {exportingPdf ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600" />
-                  Exporting...
-                </>
-              ) : (
-                <>
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                    />
-                  </svg>
-                  Export PDF
-                </>
-              )}
+              Generate OM
             </button>
           </div>
         </div>
+      )}
 
-        {/* Generating Progress */}
-        {generating && (
-          <div className="mb-6">
-            <div className="bg-white rounded-xl p-6">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600" />
-                <span className="text-sm font-medium text-gray-700">
-                  Generating OM sections with {firmConfig.displayName} style...
-                </span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div
-                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${Math.min(generateProgress, 100)}%` }}
-                />
-              </div>
-              <p className="text-xs text-gray-400 mt-2">
-                {generateProgress < 30
-                  ? 'Analyzing property data...'
-                  : generateProgress < 60
-                  ? 'Writing sections...'
-                  : generateProgress < 90
-                  ? 'Applying firm voice and formatting...'
-                  : 'Finalizing...'}
-              </p>
-            </div>
+      {/* ── OM Document ── */}
+      {!generating && sections.length > 0 && (
+        <div ref={containerRef} style={{ width: '100%', overflowX: 'auto', padding: '24px 0' }}>
+          <div
+            style={{
+              transform: 'scale(0.55)',
+              transformOrigin: 'top center',
+              width: 1056,
+              margin: '0 auto',
+            }}
+          >
+            <CushmanOM data={omData} onSectionChange={handleSectionChange} />
           </div>
-        )}
+        </div>
+      )}
 
-        {/* ── Landscape Page Preview (matches PDF layout) ── */}
-        {!generating && (() => {
-          const firmConfig = FIRM_STYLES[selectedFirmStyle];
-          const propertyName = deal?.property_name || 'Property';
-          const address = [deal?.address, deal?.city, deal?.state, deal?.zip].filter(Boolean).join(', ');
-          const totalSf = deal?.total_sf || 275243;
-          const landAcres = deal?.land_area_acres || 12.03;
-          const yearBuilt = deal?.year_built || 2001;
-          const occupancy = deal?.occupancy_pct ?? 100;
-          const waltYears = deal?.walt || 4.5;
-          const clearHeight = deal?.clear_height || "32' clear";
-          const dockDoors = deal?.dock_doors ?? 44;
-          const gradeDoors = deal?.grade_doors ?? 4;
-          const parking = deal?.parking_spaces ?? 226;
-          const zoning = deal?.zoning || 'LI (Light Industrial)';
-          const submarket = deal?.submarket || 'Inland Empire South';
-          const askingPrice = deal?.asking_price || 45000000;
-          const capRate = deal?.cap_rate || 5.25;
-          const pricePerSf = deal?.price_per_sf || (askingPrice / totalSf);
-          const noiVal = deal?.noi || (askingPrice * capRate / 100);
-          const propertyType = deal?.property_type || 'Industrial';
-          const assetClass = deal?.asset_class || 'Single-Tenant NNN';
-
-          // Helper: find section content + index by keyword
-          function getSectionContent(keyword: string): { content: string; index: number } | null {
-            const idx = sections.findIndex((s) => s.title.toLowerCase().includes(keyword.toLowerCase()));
-            if (idx >= 0) return { content: sections[idx].content, index: idx };
-            return null;
-          }
-
-          const execSummary = getSectionContent('executive summary') || getSectionContent('summary');
-          const propDesc = getSectionContent('property description') || getSectionContent('property overview') || getSectionContent('property & tenancy');
-          const tenantSection = getSectionContent('tenant') || getSectionContent('lease');
-          const marketSection = getSectionContent('market');
-          const financialSection = getSectionContent('financial') || getSectionContent('investment analysis') || getSectionContent('financials');
-
-          const coverMetrics = [
-            `${fmtNum(totalSf)} SF`,
-            `${landAcres} Acres`,
-            `${waltYears} Yr WALT`,
-            `${occupancy}% Occupied`,
-          ].join('  |  ');
-
-          // Shared navy header bar component
-          const NavyHeader = () => (
-            <div className="h-9 bg-[#0d1117] flex items-center justify-between px-6">
-              <span className="text-[10px] text-white/80 tracking-wider uppercase">{firmConfig.displayName}</span>
-              <span className="text-[10px] text-white/60">{propertyName}</span>
-            </div>
-          );
-
-          // Shared page number
-          const PageNum = ({ num }: { num: number }) => (
-            <div className="absolute bottom-3 right-5 text-[9px] text-gray-400">{num}</div>
-          );
-
-          // Editable text block
-          const EditableText = ({ sectionIndex, fallback }: { sectionIndex: number | null; fallback: string }) => {
-            const isEditing = sectionIndex !== null && editingIndex === sectionIndex;
-            const rawText = sectionIndex !== null && sections[sectionIndex] ? sections[sectionIndex].content : fallback;
-            if (isEditing) {
-              return (
-                <div
-                  ref={(el) => { if (sectionIndex !== null) sectionRefs.current[sectionIndex] = el; }}
-                  contentEditable
-                  suppressContentEditableWarning
-                  onClick={() => { if (sectionIndex !== null) handleSectionClick(sectionIndex); }}
-                  onBlur={() => { if (sectionIndex !== null) handleSectionBlur(sectionIndex); }}
-                  className="text-[10px] leading-relaxed text-[#374151] whitespace-pre-wrap outline-none cursor-text ring-2 ring-blue-200 rounded bg-blue-50/30 p-1"
-                >
-                  {rawText}
-                </div>
-              );
-            }
-            return (
-              <div
-                ref={(el) => { if (sectionIndex !== null) sectionRefs.current[sectionIndex] = el; }}
-                onClick={() => { if (sectionIndex !== null) handleSectionClick(sectionIndex); }}
-                className="text-[10px] leading-relaxed text-[#374151] outline-none cursor-text hover:bg-gray-50/50 rounded p-1 -m-1 transition-colors"
-                dangerouslySetInnerHTML={{ __html: renderMarkdown(rawText) }}
-              />
-            );
-          };
-
-          return (
-          <div className="space-y-8">
-
-            {/* ════════ PAGE 1 — Cover ════════ */}
-            <div className="aspect-[11/8.5] bg-[#0d1117] rounded-xl shadow-lg overflow-hidden relative" style={{ maxWidth: '960px', margin: '0 auto 2rem' }}>
-              {/* Hero photo area — top 55% */}
-              <div className="relative" style={{ height: '55%' }}>
-                {selectedPhotos[0] ? (
-                  <>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={selectedPhotos[0]} alt="Cover property photo" className="w-full h-full object-cover" />
-                    {/* Dark gradient overlay at bottom */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#0d1117] via-[#0d1117]/40 to-transparent" />
-                  </>
-                ) : (
-                  <div className="w-full h-full bg-gradient-to-b from-[#1a2332] to-[#0d1117] flex items-center justify-center">
-                    <p className="text-[11px] text-[#475569] tracking-wider">Add property photos to display cover image</p>
-                  </div>
-                )}
-              </div>
-              {/* Text overlay at bottom 45% */}
-              <div className="absolute bottom-0 left-0 right-0 flex flex-col items-center justify-center px-12" style={{ height: '50%' }}>
-                <p className="text-[10px] text-[#64748b] tracking-[3px] uppercase mb-4">{firmConfig.group}</p>
-                <p className="text-[10px] text-[#94b4fb] tracking-[4px] uppercase mb-3">{firmConfig.displayName}</p>
-                <h1 className="text-3xl font-bold text-white text-center mb-2" style={{ fontFamily: "'DM Serif Display', serif" }}>{propertyName}</h1>
-                <p className="text-xs text-[#94a3b8] text-center mb-4">{address}</p>
-                <p className="text-[10px] text-white/60 text-center tracking-wider mb-4">{coverMetrics}</p>
-                <div className="h-0.5 bg-[#2462F5] w-20 mb-4" />
-                <p className="text-[9px] text-[#475569] tracking-[3px] uppercase">CONFIDENTIAL OFFERING MEMORANDUM</p>
-              </div>
-            </div>
-
-            {/* ════════ PAGE 2 — Table of Contents ════════ */}
-            <div className="aspect-[11/8.5] bg-white rounded-xl shadow-lg overflow-hidden relative" style={{ maxWidth: '960px', margin: '0 auto 2rem' }}>
-              <NavyHeader />
-              <div className="p-6 h-[calc(100%-2.25rem)] flex flex-col justify-center px-16">
-                <h2 className="text-xl font-bold text-[#0d1117] mb-1 tracking-wider uppercase">Table of Contents</h2>
-                <div className="h-0.5 bg-[#2462F5] w-16 mb-8" />
-                <div className="space-y-4">
-                  {[
-                    { num: '01', title: 'EXECUTIVE SUMMARY' },
-                    { num: '02', title: 'PROPERTY DESCRIPTION' },
-                    { num: '03', title: 'PROPERTY PHOTOS' },
-                    { num: '04', title: 'LOCATION OVERVIEW' },
-                    { num: '05', title: 'TENANT & LEASE SUMMARIES' },
-                    { num: '06', title: 'FINANCIAL ANALYSIS' },
-                    { num: '07', title: 'MARKET OVERVIEW' },
-                  ].map((item) => (
-                    <div key={item.num} className="flex items-center gap-6">
-                      <span className="text-2xl font-bold text-[#2462F5] w-10">{item.num}</span>
-                      <div className="flex-1 border-b border-[#e5e5e5]" />
-                      <span className="text-[11px] font-semibold text-[#0d1117] tracking-[2px]">{item.title}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <PageNum num={2} />
-            </div>
-
-            {/* ════════ PAGE 3 — Executive Summary ════════ */}
-            <div className="aspect-[11/8.5] bg-white rounded-xl shadow-lg overflow-hidden relative" style={{ maxWidth: '960px', margin: '0 auto 2rem' }}>
-              <div className="h-16 bg-[#0d1117] flex items-center justify-between px-6">
-                <div className="flex items-center gap-4">
-                  <span className="text-xl font-bold text-white/90">01</span>
-                  <span className="text-[11px] text-white/80 tracking-[2px] uppercase font-semibold">Executive Summary</span>
-                </div>
-                <span className="text-[10px] text-white/60">{propertyName}</span>
-              </div>
-              <div className="flex gap-5 p-6 h-[calc(100%-4rem)]">
-                {/* Left 55% */}
-                <div className="w-[55%] flex flex-col">
-                  <h2 className="text-lg font-bold text-[#0d1117] mb-1">Executive Summary</h2>
-                  <div className="h-0.5 bg-[#2462F5] w-12 mb-3" />
-                  <div className="flex-1 overflow-hidden">
-                    <EditableText sectionIndex={execSummary?.index ?? null} fallback={`${firmConfig.openingPhrase} ${propertyName}, a ${fmtNum(totalSf)} SF ${propertyType.toLowerCase()} property located at ${address}.`} />
-                  </div>
-                  {/* Investment Highlights */}
-                  {(() => {
-                    const highlightItems: string[] = (() => {
-                      if (deal?.highlights && deal.highlights.length > 0) return deal.highlights;
-                      const ihField = (deal as Record<string, unknown>)?.investment_highlights;
-                      if (typeof ihField === 'string' && ihField.trim()) return ihField.split('\n').filter((l: string) => l.trim());
-                      return [
-                        `${occupancy}% leased ${assetClass.toLowerCase()} investment`,
-                        `${fmtNum(totalSf)} SF on ${landAcres} acres in ${submarket}`,
-                        `${waltYears} Year WALT with scheduled rent growth`,
-                        `Functional ${propertyType.toLowerCase()} with ${clearHeight}, ${dockDoors} dock doors`,
-                      ];
-                    })();
-                    return (
-                      <div className="mt-3">
-                        <p className="text-[10px] font-bold text-[#0d1117] mb-2 uppercase tracking-wider">Investment Highlights</p>
-                        <div className="grid grid-cols-2 gap-2">
-                          {highlightItems.slice(0, 6).map((h, i) => {
-                            const parts = h.split(/[.!:]/);
-                            const title = parts[0]?.trim() || h;
-                            const rest = parts.length > 1 ? parts.slice(1).join('.').trim() : '';
-                            return (
-                              <div key={i} className="bg-[#f8f7f4] rounded-md p-2.5 border-l-[3px] border-[#2462F5]">
-                                <p className="text-[9px] font-bold text-[#0d1117] leading-tight mb-0.5">{title}</p>
-                                {rest && <p className="text-[8px] text-[#374151] leading-snug">{rest}</p>}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-                {/* Right 45% — Investment Snapshot */}
-                <div className="w-[45%]">
-                  <div className="bg-[#f8f7f4] rounded-lg p-4">
-                    <p className="text-[11px] font-bold text-[#0d1117] mb-3 uppercase tracking-wider">Investment Snapshot</p>
-                    <div className="grid grid-cols-2 gap-3">
-                      {[
-                        { label: 'Total SF', value: fmtNum(totalSf) },
-                        { label: 'Land Area', value: `${landAcres} AC` },
-                        { label: 'Year Built', value: String(yearBuilt) },
-                        { label: 'Occupancy', value: `${occupancy}%` },
-                        { label: 'WALT', value: `${waltYears} Yrs` },
-                        { label: 'Clear Height', value: clearHeight },
-                        { label: 'Dock Doors', value: String(dockDoors) },
-                        { label: 'Grade Doors', value: String(gradeDoors) },
-                      ].map((m) => (
-                        <div key={m.label}>
-                          <p className="text-sm font-bold text-[#0d1117]">{m.value}</p>
-                          <p className="text-[9px] text-[#6b7280]">{m.label}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <PageNum num={3} />
-            </div>
-
-            {/* ════════ PAGE 4 — Property Photos ════════ */}
-            <div className="aspect-[11/8.5] bg-white rounded-xl shadow-lg overflow-hidden relative" style={{ maxWidth: '960px', margin: '0 auto 2rem' }}>
-              <NavyHeader />
-              <div className="p-6 h-[calc(100%-2.25rem)] flex flex-col">
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <h2 className="text-lg font-bold text-[#0d1117]">Property Overview</h2>
-                    <div className="h-0.5 bg-[#2462F5] w-12 mt-1" />
-                  </div>
-                  <button
-                    onClick={() => setShowPhotoPicker(true)}
-                    className="text-[10px] text-[#2462F5] hover:text-blue-700 font-medium"
-                  >
-                    Select Photos
-                  </button>
-                </div>
-                <div className="grid grid-cols-2 gap-3 flex-1">
-                  {[0, 1, 2, 3].map((i) => (
-                    <div key={i} className="rounded-lg overflow-hidden bg-[#e5e5e5] flex items-center justify-center">
-                      {selectedPhotos[i] ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={selectedPhotos[i]} alt={`Property photo ${i + 1}`} className="w-full h-full object-cover" />
-                      ) : (
-                        <span className="text-[10px] text-[#9ca3af]">Property Photo {i + 1}</span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <PageNum num={4} />
-            </div>
-
-            {/* ════════ PAGE 5 — Aerial / Location ════════ */}
-            <div className="aspect-[11/8.5] bg-white rounded-xl shadow-lg overflow-hidden relative" style={{ maxWidth: '960px', margin: '0 auto 2rem' }}>
-              <NavyHeader />
-              <div className="p-6 h-[calc(100%-2.25rem)] flex flex-col">
-                <h2 className="text-lg font-bold text-[#0d1117] mb-1">Location Overview</h2>
-                <div className="h-0.5 bg-[#2462F5] w-12 mb-4" />
-                <div className="flex-1 bg-[#e5e5e5] rounded-lg flex items-center justify-center mb-4" style={{ minHeight: '55%' }}>
-                  <span className="text-xs text-[#9ca3af]">Aerial View — Map Placeholder</span>
-                </div>
-                <div className="grid grid-cols-3 gap-3">
-                  {['Regional Access', 'Nearby Tenants', 'Transportation'].map((title) => (
-                    <div key={title} className="bg-[#f8f7f4] rounded-lg p-3">
-                      <p className="text-[10px] font-bold text-[#0d1117] mb-2">{title}</p>
-                      {[1, 2, 3].map((n) => (
-                        <p key={n} className="text-[9px] text-[#6b7280] mb-1">• Placeholder item {n}</p>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <PageNum num={5} />
-            </div>
-
-            {/* ════════ PAGE 6 — Property Description ════════ */}
-            <div className="aspect-[11/8.5] bg-white rounded-xl shadow-lg overflow-hidden relative" style={{ maxWidth: '960px', margin: '0 auto 2rem' }}>
-              <div className="h-16 bg-[#0d1117] flex items-center justify-between px-6">
-                <div className="flex items-center gap-4">
-                  <span className="text-xl font-bold text-white/90">02</span>
-                  <span className="text-[11px] text-white/80 tracking-[2px] uppercase font-semibold">Property Description</span>
-                </div>
-                <span className="text-[10px] text-white/60">{propertyName}</span>
-              </div>
-              <div className="flex gap-5 p-6 h-[calc(100%-4rem)]">
-                {/* Left 58% */}
-                <div className="w-[58%] flex flex-col">
-                  <h2 className="text-lg font-bold text-[#0d1117] mb-1">Property Description</h2>
-                  <div className="h-0.5 bg-[#2462F5] w-12 mb-3" />
-                  <div className="flex-1 overflow-hidden">
-                    <EditableText sectionIndex={propDesc?.index ?? null} fallback={`${propertyName} is a ${fmtNum(totalSf)} SF ${propertyType.toLowerCase()} facility built in ${yearBuilt}, situated on approximately ${landAcres} acres.`} />
-                  </div>
-                </div>
-                {/* Right 40% — Building Specifications */}
-                <div className="w-[42%]">
-                  <div className="bg-[#f8f7f4] rounded-lg p-4">
-                    <p className="text-[11px] font-bold text-[#0d1117] mb-3 uppercase tracking-wider">Building Specifications</p>
-                    <div className="space-y-2">
-                      {[
-                        { label: 'Clear Height', value: clearHeight },
-                        { label: 'Dock Doors', value: String(dockDoors) },
-                        { label: 'Grade-Level Doors', value: String(gradeDoors) },
-                        { label: 'Parking', value: `${parking} spaces` },
-                        { label: 'Power', value: 'TBD' },
-                        { label: 'Sprinklers', value: 'TBD' },
-                        { label: 'Zoning', value: zoning },
-                        { label: 'Year Built', value: String(yearBuilt) },
-                      ].map((row) => (
-                        <div key={row.label} className="flex justify-between border-b border-[#e5e5e5] pb-1">
-                          <span className="text-[9px] text-[#6b7280]">{row.label}</span>
-                          <span className="text-[9px] font-semibold text-[#0d1117]">{row.value}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <PageNum num={6} />
-            </div>
-
-            {/* ════════ PAGE 7 — Tenant Overview ════════ */}
-            <div className="aspect-[11/8.5] bg-white rounded-xl shadow-lg overflow-hidden relative" style={{ maxWidth: '960px', margin: '0 auto 2rem' }}>
-              <div className="h-16 bg-[#0d1117] flex items-center justify-between px-6">
-                <div className="flex items-center gap-4">
-                  <span className="text-xl font-bold text-white/90">04</span>
-                  <span className="text-[11px] text-white/80 tracking-[2px] uppercase font-semibold">Tenant &amp; Lease Summaries</span>
-                </div>
-                <span className="text-[10px] text-white/60">{propertyName}</span>
-              </div>
-              <div className="p-6 h-[calc(100%-4rem)] flex flex-col">
-                <h2 className="text-lg font-bold text-[#0d1117] mb-1">Tenant &amp; Lease Summary</h2>
-                <div className="h-0.5 bg-[#2462F5] w-12 mb-3" />
-                {/* Top metric cards */}
-                <div className="grid grid-cols-4 gap-3 mb-3">
-                  {[
-                    { label: 'Tenant', value: deal?.num_tenants ? `${deal.num_tenants} Tenant${deal.num_tenants > 1 ? 's' : ''}` : '1 Tenant' },
-                    { label: 'Lease Type', value: 'NNN' },
-                    { label: 'WALT', value: `${waltYears} Yrs` },
-                    { label: 'Annual Rent', value: fmtDollar(noiVal) },
-                  ].map((m) => (
-                    <div key={m.label} className="bg-[#f8f7f4] rounded-lg p-2 text-center">
-                      <p className="text-xs font-bold text-[#0d1117]">{m.value}</p>
-                      <p className="text-[8px] text-[#6b7280]">{m.label}</p>
-                    </div>
-                  ))}
-                </div>
-                {/* Tenant description */}
-                <div className="mb-3">
-                  <EditableText sectionIndex={tenantSection?.index ?? null} fallback={`The property is ${occupancy}% leased with ${waltYears} years of WALT remaining.`} />
-                </div>
-                {/* Rent Roll table */}
-                <div className="flex-1 overflow-hidden">
-                  <table className="w-full text-[9px]">
-                    <thead>
-                      <tr className="bg-[#2462F5] text-white">
-                        {['Suite', 'Tenant', 'SF', '% of NRA', 'Lease Start', 'Lease End', 'Monthly Rent', 'Annual PSF'].map((col) => (
-                          <th key={col} className="px-2 py-1.5 text-left font-semibold">{col}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr className="bg-white">
-                        <td className="px-2 py-1.5">100</td>
-                        <td className="px-2 py-1.5">Primary Tenant</td>
-                        <td className="px-2 py-1.5">{fmtNum(totalSf)}</td>
-                        <td className="px-2 py-1.5">100%</td>
-                        <td className="px-2 py-1.5">01/2021</td>
-                        <td className="px-2 py-1.5">12/2028</td>
-                        <td className="px-2 py-1.5">{fmtDollar(Math.round(noiVal / 12))}</td>
-                        <td className="px-2 py-1.5">{fmtDollarDec(noiVal / totalSf)}</td>
-                      </tr>
-                      <tr className="bg-[#f9fafb] font-bold">
-                        <td className="px-2 py-1.5" colSpan={2}>Total</td>
-                        <td className="px-2 py-1.5">{fmtNum(totalSf)}</td>
-                        <td className="px-2 py-1.5">100%</td>
-                        <td className="px-2 py-1.5" colSpan={2} />
-                        <td className="px-2 py-1.5">{fmtDollar(Math.round(noiVal / 12))}</td>
-                        <td className="px-2 py-1.5">{fmtDollarDec(noiVal / totalSf)}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              <PageNum num={7} />
-            </div>
-
-            {/* ════════ PAGE 8 — Financial Summary ════════ */}
-            <div className="aspect-[11/8.5] bg-white rounded-xl shadow-lg overflow-hidden relative" style={{ maxWidth: '960px', margin: '0 auto 2rem' }}>
-              <div className="h-16 bg-[#0d1117] flex items-center justify-between px-6">
-                <div className="flex items-center gap-4">
-                  <span className="text-xl font-bold text-white/90">05</span>
-                  <span className="text-[11px] text-white/80 tracking-[2px] uppercase font-semibold">Financial Analysis</span>
-                </div>
-                <span className="text-[10px] text-white/60">{propertyName}</span>
-              </div>
-              <div className="flex gap-5 p-6 h-[calc(100%-4rem)]">
-                {/* Left 55% — Pro Forma */}
-                <div className="w-[55%] flex flex-col">
-                  <h2 className="text-lg font-bold text-[#0d1117] mb-1">Financial Analysis</h2>
-                  <div className="h-0.5 bg-[#2462F5] w-12 mb-3" />
-                  <div className="mb-3">
-                    <EditableText sectionIndex={financialSection?.index ?? null} fallback="The following pro forma illustrates projected income and expenses based on current lease terms." />
-                  </div>
-                  <table className="w-full text-[9px]">
-                    <thead>
-                      <tr className="bg-[#2462F5] text-white">
-                        <th className="px-2 py-1.5 text-left font-semibold">Item</th>
-                        <th className="px-2 py-1.5 text-right font-semibold">Year 1</th>
-                        <th className="px-2 py-1.5 text-right font-semibold">Year 2</th>
-                        <th className="px-2 py-1.5 text-right font-semibold">Year 3</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {[
-                        { label: 'Gross Potential Rent', y1: noiVal * 1.05 },
-                        { label: 'Vacancy (5%)', y1: -(noiVal * 0.05) },
-                        { label: 'Effective Gross Income', y1: noiVal },
-                        { label: 'Operating Expenses', y1: 0 },
-                        { label: 'Net Operating Income', y1: noiVal },
-                      ].map((row, i) => (
-                        <tr key={row.label} className={i % 2 === 1 ? 'bg-[#f9fafb]' : 'bg-white'}>
-                          <td className={`px-2 py-1.5 ${row.label === 'Net Operating Income' ? 'font-bold' : ''}`}>{row.label}</td>
-                          <td className="px-2 py-1.5 text-right">{fmtDollar(Math.round(row.y1))}</td>
-                          <td className="px-2 py-1.5 text-right">{fmtDollar(Math.round(row.y1 * 1.03))}</td>
-                          <td className="px-2 py-1.5 text-right">{fmtDollar(Math.round(row.y1 * 1.0609))}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {/* Right 45% — Key Financial Metrics */}
-                <div className="w-[45%]">
-                  <p className="text-[11px] font-bold text-[#0d1117] mb-3 uppercase tracking-wider">Key Financial Metrics</p>
-                  <div className="space-y-3">
-                    {[
-                      { label: 'Asking Price', value: fmtDollar(askingPrice), color: 'bg-[#0d1117] text-white' },
-                      { label: 'Cap Rate', value: fmtPct(capRate), color: 'bg-[#2462F5] text-white' },
-                      { label: 'Price / SF', value: fmtDollarDec(pricePerSf), color: 'bg-[#f8f7f4] text-[#0d1117]' },
-                      { label: 'Net Operating Income', value: fmtDollar(Math.round(noiVal)), color: 'bg-[#f8f7f4] text-[#0d1117]' },
-                    ].map((card) => (
-                      <div key={card.label} className={`${card.color} rounded-lg p-3`}>
-                        <p className="text-[9px] opacity-70 mb-0.5">{card.label}</p>
-                        <p className="text-sm font-bold">{card.value}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <PageNum num={8} />
-            </div>
-
-            {/* ════════ PAGE 9 — Market Overview ════════ */}
-            <div className="aspect-[11/8.5] bg-white rounded-xl shadow-lg overflow-hidden relative" style={{ maxWidth: '960px', margin: '0 auto 2rem' }}>
-              <div className="h-16 bg-[#0d1117] flex items-center justify-between px-6">
-                <div className="flex items-center gap-4">
-                  <span className="text-xl font-bold text-white/90">03</span>
-                  <span className="text-[11px] text-white/80 tracking-[2px] uppercase font-semibold">Area &amp; Market Overview</span>
-                </div>
-                <span className="text-[10px] text-white/60">{propertyName}</span>
-              </div>
-              <div className="flex gap-5 p-6 h-[calc(100%-4rem)]">
-                {/* Left 55% */}
-                <div className="w-[55%] flex flex-col">
-                  <h2 className="text-lg font-bold text-[#0d1117] mb-1">Market Overview</h2>
-                  <div className="h-0.5 bg-[#2462F5] w-12 mb-3" />
-                  <div className="flex-1 overflow-hidden">
-                    <EditableText sectionIndex={marketSection?.index ?? null} fallback={`The ${submarket} submarket continues to demonstrate strong industrial fundamentals driven by sustained demand from e-commerce, logistics, and distribution operators.`} />
-                  </div>
-                </div>
-                {/* Right 45% — Market Snapshot */}
-                <div className="w-[45%]">
-                  <div className="bg-[#f8f7f4] rounded-lg p-4">
-                    <p className="text-[11px] font-bold text-[#0d1117] mb-3 uppercase tracking-wider">Market Snapshot</p>
-                    <div className="space-y-2">
-                      {[
-                        { label: 'Submarket Vacancy', value: '3.2%' },
-                        { label: 'Avg Asking Rent', value: `${fmtDollarDec(noiVal / totalSf)} NNN` },
-                        { label: 'Net Absorption', value: '2.1 MSF' },
-                        { label: 'Under Construction', value: '1.4 MSF' },
-                        { label: 'Rent Growth', value: '+4.2%' },
-                      ].map((row) => (
-                        <div key={row.label} className="flex justify-between border-b border-[#e5e5e5] pb-1">
-                          <span className="text-[9px] text-[#6b7280]">{row.label}</span>
-                          <span className="text-[9px] font-semibold text-[#0d1117]">{row.value}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <PageNum num={9} />
-            </div>
-
-            {/* ════════ PAGE 10 — Disclaimer ════════ */}
-            <div className="aspect-[11/8.5] bg-white rounded-xl shadow-lg overflow-hidden relative" style={{ maxWidth: '960px', margin: '0 auto 2rem' }}>
-              <NavyHeader />
-              <div className="p-6 h-[calc(100%-2.25rem)] flex flex-col">
-                <h2 className="text-lg font-bold text-[#0d1117] mb-1">Confidentiality &amp; Disclaimer</h2>
-                <div className="h-0.5 bg-[#2462F5] w-12 mb-4" />
-                <div className="flex-1 overflow-hidden">
-                  <p className="text-[10px] leading-relaxed text-[#374151] whitespace-pre-wrap">{firmConfig.disclaimer}</p>
-                </div>
-                <div className="mt-auto pt-4 border-t border-[#e5e5e5]">
-                  <p className="text-[9px] text-[#6b7280] text-center">{firmConfig.displayName} &bull; {firmConfig.group} &bull; 2026</p>
-                </div>
-              </div>
-              <PageNum num={10} />
-            </div>
-
-          </div>
-          );
-        })()}
-      </div>
-
-      {/* Photo Picker Modal */}
+      {/* ── Photo Picker Modal ── */}
       {showPhotoPicker && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setShowPhotoPicker(false);
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.5)',
+            zIndex: 100,
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
           }}
+          onClick={() => setShowPhotoPicker(false)}
         >
-          <div className="bg-white rounded-2xl max-w-3xl w-full mx-4 max-h-[80vh] flex flex-col">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-              <div>
-                <h3 className="text-lg font-bold text-gray-900">
-                  Select Photos
-                </h3>
-                <p className="text-sm text-gray-500 mt-0.5">
-                  {selectedPhotos.length} photo
-                  {selectedPhotos.length !== 1 ? 's' : ''} selected
-                </p>
-              </div>
-              <button
-                onClick={() => {
-                  setShowPhotoPicker(false);
-                  saveDraft(sections, selectedPhotos);
-                }}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <svg
-                  className="w-6 h-6"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div className="p-6 overflow-y-auto flex-1">
-              {availablePhotos.length > 0 ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {availablePhotos.map((photo, index) => {
-                    const isSelected = selectedPhotos.includes(photo);
-                    return (
-                      <button
-                        key={`${photo}-${index}`}
-                        onClick={() => togglePhotoSelection(photo)}
-                        className={`relative aspect-[4/3] rounded-lg overflow-hidden border-2 transition-all ${
-                          isSelected
-                            ? 'border-blue-500 ring-2 ring-blue-200'
-                            : 'border-gray-200 hover:border-gray-300'
-                        }`}
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={photo}
-                          alt={`Available photo ${index + 1}`}
-                          className="w-full h-full object-cover"
-                        />
-                        {isSelected && (
-                          <div className="absolute inset-0 bg-blue-500/20 flex items-center justify-center">
-                            <div className="bg-blue-600 text-white rounded-full w-8 h-8 flex items-center justify-center">
-                              <svg
-                                className="w-5 h-5"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2}
-                                  d="M5 13l4 4L19 7"
-                                />
-                              </svg>
-                            </div>
-                          </div>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="text-center py-12">
-                  <svg
-                    className="w-12 h-12 text-gray-300 mx-auto mb-3"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={1.5}
-                      d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                    />
-                  </svg>
-                  <p className="text-sm text-gray-500">
-                    No photos available. Upload photos to the deal to see them
-                    here.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* Modal Footer */}
-            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: 12,
+              padding: 24,
+              maxWidth: 720,
+              width: '90%',
+              maxHeight: '80vh',
+              overflow: 'auto',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 16,
+              }}
+            >
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>
+                Select & Order Photos ({selectedPhotos.length} selected)
+              </h3>
               <button
                 onClick={() => setShowPhotoPicker(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  setShowPhotoPicker(false);
-                  saveDraft(sections, selectedPhotos);
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: 20,
+                  cursor: 'pointer',
+                  color: '#6b7280',
                 }}
-                className="px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
               >
-                Done
+                &times;
               </button>
+            </div>
+
+            {/* Selected photos (draggable) */}
+            {selectedPhotos.length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 8 }}>
+                  Drag to reorder. Click to remove.
+                </p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {selectedPhotos.map((url, i) => (
+                    <div
+                      key={url}
+                      draggable
+                      onDragStart={() => handlePhotoDragStart(i)}
+                      onDragOver={(e) => handlePhotoDragOver(e, i)}
+                      onDrop={() => handlePhotoDrop(i)}
+                      onClick={() => togglePhotoSelection(url)}
+                      style={{
+                        width: 100,
+                        height: 75,
+                        borderRadius: 6,
+                        overflow: 'hidden',
+                        border:
+                          dragOver === i ? '2px solid #2563eb' : '2px solid #10b981',
+                        cursor: 'grab',
+                        position: 'relative',
+                      }}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={url}
+                        alt={`Photo ${i + 1}`}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: 2,
+                          left: 2,
+                          background: '#10b981',
+                          color: '#fff',
+                          borderRadius: 4,
+                          padding: '1px 5px',
+                          fontSize: 11,
+                          fontWeight: 600,
+                        }}
+                      >
+                        {i + 1}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Available photos */}
+            <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 8 }}>
+              Available photos (click to toggle):
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {availablePhotos.map((url) => {
+                const isSelected = selectedPhotos.includes(url);
+                return (
+                  <div
+                    key={url}
+                    onClick={() => togglePhotoSelection(url)}
+                    style={{
+                      width: 100,
+                      height: 75,
+                      borderRadius: 6,
+                      overflow: 'hidden',
+                      border: isSelected
+                        ? '2px solid #10b981'
+                        : '2px solid #e5e7eb',
+                      cursor: 'pointer',
+                      opacity: isSelected ? 1 : 0.6,
+                    }}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={url}
+                      alt="Available"
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                  </div>
+                );
+              })}
+              {availablePhotos.length === 0 && (
+                <p style={{ color: '#9ca3af', fontSize: 13 }}>
+                  No photos found. Upload photos to the deal first.
+                </p>
+              )}
             </div>
           </div>
         </div>
