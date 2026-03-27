@@ -101,11 +101,13 @@ function UploadZone({
   accept,
   files,
   onDrop,
+  onRemove,
 }: {
   label: string;
   accept: Record<string, string[]>;
   files: File[];
   onDrop: (accepted: File[]) => void;
+  onRemove: (index: number) => void;
 }) {
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -114,40 +116,56 @@ function UploadZone({
   });
 
   return (
-    <div
-      {...getRootProps()}
-      className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
-        isDragActive
-          ? 'border-blue-500 bg-blue-50'
-          : 'border-gray-300 hover:border-blue-400'
-      }`}
-    >
-      <input {...getInputProps()} />
-      <svg
-        className="mx-auto h-10 w-10 text-gray-400 mb-3"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-        strokeWidth={1.5}
+    <div className="space-y-2">
+      <div
+        {...getRootProps()}
+        className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
+          isDragActive
+            ? 'border-blue-500 bg-blue-50'
+            : 'border-gray-300 hover:border-blue-400'
+        }`}
       >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="M12 16v-8m0 0-3 3m3-3 3 3M6.75 20.25h10.5A2.25 2.25 0 0019.5 18V6a2.25 2.25 0 00-2.25-2.25H6.75A2.25 2.25 0 004.5 6v12a2.25 2.25 0 002.25 2.25z"
-        />
-      </svg>
-      <p className="text-sm font-medium text-gray-700">{label}</p>
-      <p className="text-xs text-gray-500 mt-1">
-        {isDragActive ? 'Drop files here...' : 'Drag & drop or click to browse'}
-      </p>
+        <input {...getInputProps()} />
+        <svg
+          className="mx-auto h-8 w-8 text-gray-400 mb-2"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={1.5}
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M12 16v-8m0 0-3 3m3-3 3 3M6.75 20.25h10.5A2.25 2.25 0 0019.5 18V6a2.25 2.25 0 00-2.25-2.25H6.75A2.25 2.25 0 004.5 6v12a2.25 2.25 0 002.25 2.25z"
+          />
+        </svg>
+        <p className="text-sm font-medium text-gray-700">{label}</p>
+        <p className="text-xs text-gray-500 mt-1">
+          {isDragActive ? 'Drop files here...' : 'Drag & drop or click to browse'}
+        </p>
+      </div>
       {files.length > 0 && (
-        <ul className="mt-4 text-xs text-gray-600 space-y-1">
+        <ul className="space-y-1">
           {files.map((f, i) => (
-            <li key={i} className="flex items-center justify-center gap-1">
-              <svg className="h-3 w-3 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-              {f.name}
+            <li key={i} className="flex items-center justify-between gap-2 px-3 py-2 bg-gray-50 rounded-lg text-sm text-gray-700">
+              <div className="flex items-center gap-2 min-w-0">
+                <svg className="h-4 w-4 text-green-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                <span className="truncate">{f.name}</span>
+                <span className="text-xs text-gray-400 flex-shrink-0">
+                  {(f.size / 1024 / 1024).toFixed(1)} MB
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onRemove(i); }}
+                className="flex-shrink-0 text-gray-400 hover:text-red-500 transition-colors"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </li>
           ))}
         </ul>
@@ -447,9 +465,8 @@ export default function NewDealPage() {
                   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
                 }}
                 files={offeringDocs}
-                onDrop={(accepted) =>
-                  setOfferingDocs((prev) => [...prev, ...accepted])
-                }
+                onDrop={(accepted) => setOfferingDocs((prev) => [...prev, ...accepted])}
+                onRemove={(i) => setOfferingDocs((prev) => prev.filter((_, idx) => idx !== i))}
               />
 
               <UploadZone
@@ -461,9 +478,8 @@ export default function NewDealPage() {
                   'text/csv': ['.csv'],
                 }}
                 files={financialDocs}
-                onDrop={(accepted) =>
-                  setFinancialDocs((prev) => [...prev, ...accepted])
-                }
+                onDrop={(accepted) => setFinancialDocs((prev) => [...prev, ...accepted])}
+                onRemove={(i) => setFinancialDocs((prev) => prev.filter((_, idx) => idx !== i))}
               />
 
               <UploadZone
@@ -474,9 +490,8 @@ export default function NewDealPage() {
                   'image/webp': ['.webp'],
                 }}
                 files={propertyPhotos}
-                onDrop={(accepted) =>
-                  setPropertyPhotos((prev) => [...prev, ...accepted])
-                }
+                onDrop={(accepted) => setPropertyPhotos((prev) => [...prev, ...accepted])}
+                onRemove={(i) => setPropertyPhotos((prev) => prev.filter((_, idx) => idx !== i))}
               />
             </div>
 
