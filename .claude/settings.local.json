@@ -18,7 +18,8 @@
       "Bash(pip install:*)",
       "Bash(python -m pip install pdfplumber)",
       "Bash(npx tsc:*)",
-      "Bash(wc -l src/app/deals/[id]/om/page.tsx)"
+      "Bash(wc -l src/app/deals/[id]/om/page.tsx)",
+      "Bash(wc -l src/app/deals/[id]/page.tsx)"
     ]
   }
 }
